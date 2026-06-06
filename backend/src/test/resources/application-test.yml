@@ -1,0 +1,18 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/rwid_community_test
+  
+jwt:
+  secret: test-secret-key-for-testing-purposes-only
+  expiration: 86400000
+
+storage:
+  type: local
+  local:
+    path: ./storage-test
+
+logging:
+  level:
+    root: WARN
+    com.rwid: DEBUG
