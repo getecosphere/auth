@@ -33,10 +33,11 @@ public class AuthController {
             @RequestParam String email,
             @RequestParam String password,
             @RequestParam String name,
-            @RequestParam String platformId) {
-        
+            @RequestParam String platformId,
+            @RequestParam(required = false, defaultValue = "member") String role) {
+
         log.info("Registration request for user: {}", username);
-        AuthResponse response = authService.register(username, email, password, name, platformId);
+        AuthResponse response = authService.register(username, email, password, name, platformId, role);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
