@@ -53,6 +53,10 @@ public class UserService {
     }
 
     public UserDTO registerUser(String username, String email, String password, String name, String platformId) {
+        return registerUser(username, email, password, name, platformId, "member");
+    }
+
+    public UserDTO registerUser(String username, String email, String password, String name, String platformId, String role) {
         // Check if user already exists
         java.util.Optional<User> existingUsername = userRepository.findByUsername(username);
         if (existingUsername.isPresent()) {
@@ -70,7 +74,7 @@ public class UserService {
                 .email(email)
                 .passwordHash(passwordEncoder.encode(password))
                 .name(name)
-                .role("member")
+                .role(role != null && !role.isBlank() ? role : "member")
                 .platformId(platformId)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())

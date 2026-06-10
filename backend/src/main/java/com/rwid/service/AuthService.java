@@ -56,9 +56,13 @@ public class AuthService {
     }
 
     public AuthResponse register(String username, String email, String password, String name, String platformId) {
+        return register(username, email, password, name, platformId, "member");
+    }
+
+    public AuthResponse register(String username, String email, String password, String name, String platformId, String role) {
         log.info("Registration attempt for user: {}", username);
-        
-        UserDTO userDTO = userService.registerUser(username, email, password, name, platformId);
+
+        UserDTO userDTO = userService.registerUser(username, email, password, name, platformId, role);
         
         String token = jwtTokenProvider.generateToken(
                 userDTO.getId(),
