@@ -72,6 +72,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/register", "/auth/register-with-profile", "/auth/oauth/google/callback").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/auth/change-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/auth/oauth/google").permitAll()
                 .requestMatchers(HttpMethod.GET, "/schools").permitAll()
                 .requestMatchers(HttpMethod.POST, "/schools").permitAll()
