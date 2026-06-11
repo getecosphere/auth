@@ -3,6 +3,7 @@ package com.rwid.controller;
 import com.rwid.dto.AuthRequest;
 import com.rwid.dto.AuthResponse;
 import com.rwid.service.AuthService;
+import com.rwid.service.UserService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UserService userService) {
         this.authService = authService;
+        this.userService = userService;
     }
 
     @PostMapping("/login")
@@ -50,8 +53,17 @@ public class AuthController {
             @RequestParam String province) {
 
         log.info("Registration with profile request for user: {}", email);
-        AuthResponse response = authService.registerWithProfile(email, password, name, 
+        AuthResponse response = authService.registerWithProfile(email, password, name,
                                                                whatsappNumber, province, "");
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PutMapping("/change-password")
+    public ResponseEntity<Void> changePassword(
+            @RequestParam String userId,
+            @RequestParam String newPassword) {
+        log.info("Change password request for userId: {}", userId);
+        userService.changePassword(userId, newPassword);
+        return ResponseEntity.noContent().build();
     }
 }
