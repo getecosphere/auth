@@ -20,4 +20,7 @@ public interface UserRepository extends MongoRepository<User, String> {
     
     @Query("{ 'platformId': ?0, 'name': { $regex: ?1, $options: 'i' }, 'deletedAt': null }")
     List<User> searchByNameInPlatform(String platformId, String query);
+    
+    @Query("{ 'username': { $in: ?0 }, 'deletedAt': null }")
+    List<User> findByUsernameIn(List<String> usernames);
 }

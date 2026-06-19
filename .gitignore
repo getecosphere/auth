@@ -1,0 +1,71 @@
+# === Auth Project .gitignore ===
+# Java/Maven microservice project
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+.flattened-pom.xml
+
+# Gradle (if used)
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+gradle/
+
+# IDE files
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+.settings/
+.project
+.classpath
+bin/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+log/
+
+# Environment files
+.env*
+!.env*.example
+!.env*.template
+
+# Runtime
+*.pid
+*.pid.lock
+
+# Application specific
+storage/
+storage-test/
+backups/
+data/
+
+# Test reports
+test-results/
+surefire-reports/
+failsafe-reports/
+
+# Coverage reports
+jacoco/
+*.exec
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
