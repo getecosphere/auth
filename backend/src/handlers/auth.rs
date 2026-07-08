@@ -128,6 +128,19 @@ pub async fn get_user_identity(
     Ok(Json(UserDto::from(&user)))
 }
 
+/// Same as `get_user_identity` but keyed by username, for lms-backend to
+/// hydrate a public `/users/username/{username}` profile view it has never
+/// seen locally.
+pub async fn get_user_identity_by_username(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+) -> AppResult<Json<UserDto>> {
+    let user = user_repo::find_by_username(&state, &username)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("User not found: {username}")))?;
+    Ok(Json(UserDto::from(&user)))
+}
+
 fn issue_auth_response(
     state: &AppState,
     user: &crate::models::user::User,

@@ -47,6 +47,10 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::auth::check_existence),
         )
         .route("/auth/users/:id", get(handlers::auth::get_user_identity))
+        .route(
+            "/auth/users/username/:username",
+            get(handlers::auth::get_user_identity_by_username),
+        )
         .route("/users/:id", delete(handlers::users::deactivate_user))
         .route("/users/:id/avatar", post(handlers::users::upload_avatar))
         .route(
