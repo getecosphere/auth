@@ -1,18 +1,4 @@
-mod auth_extractor;
-mod config;
-mod dto;
-mod error;
-mod handlers;
-mod jwt;
-mod models;
-mod password;
-mod routes;
-mod state;
-mod storage;
-mod user_repo;
-
-use config::AppConfig;
-use state::AppState;
+use rwid_auth_service::{config::AppConfig, routes, state::AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
