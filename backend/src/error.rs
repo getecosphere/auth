@@ -23,6 +23,7 @@ pub enum AppError {
     NotFound(String),
     BadRequest(String),
     Forbidden(String),
+    Conflict(String),
     Internal(anyhow::Error),
 }
 
@@ -33,6 +34,7 @@ impl AppError {
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, "RESOURCE_NOT_FOUND"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "INVALID_ARGUMENT"),
             AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "ACCESS_DENIED"),
+            AppError::Conflict(_) => (StatusCode::CONFLICT, "ALREADY_EXISTS"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR"),
         }
     }
@@ -47,6 +49,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(msg) => (msg, None),
             AppError::BadRequest(msg) => (msg, None),
             AppError::Forbidden(msg) => (msg, None),
+            AppError::Conflict(msg) => (msg, None),
             AppError::Internal(err) => {
                 tracing::error!("Unexpected error occurred: {err:?}");
                 ("An unexpected error occurred".to_string(), None)
@@ -93,4 +96,19 @@ pub fn require_non_blank(fields: &[(&str, &str)]) -> AppResult<()> {
     } else {
         Err(AppError::Validation(details))
     }
+}
+
+/// The frontend also checks this, but the API can be called directly, so
+/// this must be enforced server-side too.
+pub fn require_password_strength(password: &str) -> AppResult<()> {
+    const MIN_LENGTH: usize = 8;
+    if password.chars().count() < MIN_LENGTH {
+        let mut details = HashMap::new();
+        details.insert(
+            "password".to_string(),
+            format!("Password must be at least {MIN_LENGTH} characters"),
+        );
+        return Err(AppError::Validation(details));
+    }
+    Ok(())
 }

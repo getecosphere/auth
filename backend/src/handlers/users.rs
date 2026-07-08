@@ -93,5 +93,10 @@ pub async fn deactivate_user(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("User not found: {user_id}")))?;
     user_repo::soft_delete(&state, &user_id).await?;
+    tracing::warn!(
+        target_user_id = %user_id,
+        deactivated_by = %auth.user_id,
+        "account deactivated"
+    );
     Ok(StatusCode::NO_CONTENT)
 }

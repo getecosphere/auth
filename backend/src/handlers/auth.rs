@@ -5,15 +5,23 @@ use axum::{
 };
 
 use crate::{
+    auth_extractor::AuthUser,
     dto::{
         AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse,
         LoginRequest, RegisterQuery, RegisterWithProfileQuery, UserDto,
     },
-    error::{require_non_blank, AppError, AppResult},
+    error::{require_non_blank, require_password_strength, AppError, AppResult},
     jwt, password,
     state::AppState,
     user_repo,
 };
+
+/// A precomputed, valid bcrypt hash with no corresponding real password.
+/// Used to keep login's response time constant whether or not the username
+/// exists -- without this, "user not found" returns immediately while
+/// "wrong password" pays the full bcrypt cost, and that timing difference
+/// is enough to enumerate valid usernames.
+const DUMMY_PASSWORD_HASH: &str = "$2b$10$NgQ6Jvr432x5WAphKYFAHOiB/j8WX.ENwhOgv4lALaR1rszL4Xfbe";
 
 pub async fn login(
     State(state): State<AppState>,
@@ -21,13 +29,20 @@ pub async fn login(
 ) -> AppResult<Json<AuthResponse>> {
     require_non_blank(&[("username", &req.username), ("password", &req.password)])?;
 
-    let user = user_repo::find_by_username(&state, &req.username)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("Invalid credentials".to_string()))?;
+    let user = user_repo::find_by_username(&state, &req.username).await?;
+    let password_hash = user
+        .as_ref()
+        .map(|u| u.password_hash.as_str())
+        .unwrap_or(DUMMY_PASSWORD_HASH);
+    let password_ok = password::verify_password(&req.password, password_hash);
 
-    if !password::verify_password(&req.password, &user.password_hash) {
-        return Err(AppError::BadRequest("Invalid credentials".to_string()));
-    }
+    let user = match (user, password_ok) {
+        (Some(user), true) => user,
+        _ => {
+            tracing::warn!(username = %req.username, "login failed: invalid credentials");
+            return Err(AppError::BadRequest("Invalid credentials".to_string()));
+        }
+    };
 
     Ok(Json(issue_auth_response(&state, &user)?))
 }
@@ -42,12 +57,15 @@ pub async fn register(
         ("password", &req.password),
         ("name", &req.name),
     ])?;
+    require_password_strength(&req.password)?;
 
-    if let Some(existing) = user_repo::find_by_username(&state, &req.username).await? {
-        return Ok((StatusCode::CREATED, Json(issue_auth_response(&state, &existing)?)));
+    if user_repo::find_by_username(&state, &req.username).await?.is_some() {
+        tracing::warn!(username = %req.username, "register rejected: username already taken");
+        return Err(AppError::Conflict("Username is already taken".to_string()));
     }
-    if let Some(existing) = user_repo::find_by_email(&state, &req.email).await? {
-        return Ok((StatusCode::CREATED, Json(issue_auth_response(&state, &existing)?)));
+    if user_repo::find_by_email(&state, &req.email).await?.is_some() {
+        tracing::warn!(email = %req.email, "register rejected: email already registered");
+        return Err(AppError::Conflict("Email is already registered".to_string()));
     }
 
     let role = req.role.filter(|r| !r.is_empty()).unwrap_or_else(|| "member".to_string());
@@ -67,9 +85,10 @@ pub async fn register_with_profile(
         ("password", &req.password),
         ("name", &req.name),
     ])?;
+    require_password_strength(&req.password)?;
 
-    if let Some(existing) = user_repo::find_by_email(&state, &req.email).await? {
-        return Ok((StatusCode::CREATED, Json(issue_auth_response(&state, &existing)?)));
+    if user_repo::find_by_email(&state, &req.email).await?.is_some() {
+        return Err(AppError::Conflict("Email is already registered".to_string()));
     }
 
     let username = req.email.split('@').next().unwrap_or(&req.email).to_string();
@@ -82,19 +101,26 @@ pub async fn register_with_profile(
 
 pub async fn change_password(
     State(state): State<AppState>,
+    auth: AuthUser,
     Query(req): Query<ChangePasswordQuery>,
 ) -> AppResult<StatusCode> {
     require_non_blank(&[
-        ("userId", &req.user_id),
+        ("currentPassword", &req.current_password),
         ("newPassword", &req.new_password),
     ])?;
+    require_password_strength(&req.new_password)?;
 
-    user_repo::find_by_id(&state, &req.user_id)
+    let user = user_repo::find_by_id(&state, &auth.user_id)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("User not found: {}", req.user_id)))?;
+        .ok_or_else(|| AppError::NotFound(format!("User not found: {}", auth.user_id)))?;
+
+    if !password::verify_password(&req.current_password, &user.password_hash) {
+        tracing::warn!(user_id = %auth.user_id, "change-password rejected: wrong current password");
+        return Err(AppError::BadRequest("Current password is incorrect".to_string()));
+    }
 
     let hashed = password::hash_password(&req.new_password)?;
-    user_repo::update_password(&state, &req.user_id, &hashed).await?;
+    user_repo::update_password(&state, &auth.user_id, &hashed).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

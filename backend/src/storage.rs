@@ -1,7 +1,8 @@
 use bson::{doc, oid::ObjectId};
 use chrono::Utc;
-use image::{codecs::webp::WebPEncoder, ExtendedColorType, ImageEncoder};
+use image::{codecs::webp::WebPEncoder, ExtendedColorType, ImageEncoder, ImageReader};
 use mongodb::Collection;
+use std::io::Cursor;
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -15,6 +16,14 @@ fn is_avatar_or_cover(file_type: &str) -> bool {
         "avatar" | "avatars" | "cover-photo" | "cover-photos"
     )
 }
+
+/// A tiny, highly-compressed file (well within the request body limit) can
+/// still decode to an enormous pixel buffer -- a "decompression bomb" that
+/// exhausts memory. 30 megapixels comfortably covers any real profile photo
+/// (an 6000x5000 photo is 30MP) while bounding the worst case; this is
+/// checked from the format header alone, without decoding pixel data, so
+/// the expensive full decode below never runs on an oversized image.
+const MAX_IMAGE_PIXELS: u64 = 30_000_000;
 
 pub struct UploadedImage {
     pub file_url: String,
@@ -40,6 +49,17 @@ pub async fn upload_identity_image(
                 "Invalid file type. Expected image upload for type: {file_type}"
             )))
         }
+    }
+
+    let (width, height) = ImageReader::new(Cursor::new(&bytes))
+        .with_guessed_format()
+        .map_err(|e| AppError::BadRequest(format!("Failed to read image header: {e}")))?
+        .into_dimensions()
+        .map_err(|e| AppError::BadRequest(format!("Failed to read image header: {e}")))?;
+    if u64::from(width) * u64::from(height) > MAX_IMAGE_PIXELS {
+        return Err(AppError::BadRequest(format!(
+            "Image is too large ({width}x{height}); maximum is {MAX_IMAGE_PIXELS} pixels"
+        )));
     }
 
     let image = image::load_from_memory(&bytes)

@@ -1,10 +1,37 @@
+use std::{sync::Arc, time::Duration};
+
 use axum::{
+    http::HeaderValue,
+    response::Response,
     routing::{delete, get, post, put},
     Router,
 };
-use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
+use tower::ServiceBuilder;
+use tower_governor::{governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer};
+use tower_http::{
+    cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
+    limit::RequestBodyLimitLayer,
+};
 
 use crate::{handlers, state::AppState};
+
+/// Generous everyday limit: allows normal page-load bursts of API calls
+/// without being annoying, while still bounding sustained abuse.
+const GENERAL_BURST: u32 = 30;
+const GENERAL_REPLENISH_SECS: u64 = 1;
+
+/// Tight limit for credential-related endpoints (login, register,
+/// register-with-profile, change-password): a few rapid attempts are
+/// tolerated (typo retries), sustained attempts are throttled hard to blunt
+/// brute force / credential stuffing.
+const AUTH_BURST: u32 = 5;
+const AUTH_REPLENISH_SECS: u64 = 10;
+
+/// Multipart avatar/cover uploads decode+re-encode a whole image in memory;
+/// this is generous for a profile photo but bounds worst-case allocation
+/// from the raw upload size (the decompression-bomb guard in storage.rs
+/// bounds the *decoded* size separately).
+const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 
 pub fn build_router(state: AppState) -> Router {
     let origins: Vec<_> = state
@@ -31,10 +58,30 @@ pub fn build_router(state: AppState) -> Router {
             axum::http::header::AUTHORIZATION,
         ])
         .allow_credentials(true)
-        .max_age(std::time::Duration::from_secs(3600));
+        .max_age(Duration::from_secs(3600));
 
-    let api_routes = Router::new()
-        .route("/health", get(handlers::health::health))
+    // auth-sensitive endpoints get their own, much stricter limiter
+    let auth_governor_config = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(AUTH_REPLENISH_SECS)
+            .burst_size(AUTH_BURST)
+            .finish()
+            .expect("valid governor config"),
+    );
+    spawn_governor_cleanup(auth_governor_config.clone());
+
+    let general_governor_config = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(GENERAL_REPLENISH_SECS)
+            .burst_size(GENERAL_BURST)
+            .finish()
+            .expect("valid governor config"),
+    );
+    spawn_governor_cleanup(general_governor_config.clone());
+
+    let credential_routes = Router::new()
         .route("/auth/login", post(handlers::auth::login))
         .route("/auth/register", post(handlers::auth::register))
         .route(
@@ -42,6 +89,12 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::auth::register_with_profile),
         )
         .route("/auth/change-password", put(handlers::auth::change_password))
+        .layer(GovernorLayer {
+            config: auth_governor_config,
+        });
+
+    let general_routes = Router::new()
+        .route("/health", get(handlers::health::health))
         .route(
             "/auth/users/check-existence",
             post(handlers::auth::check_existence),
@@ -62,8 +115,52 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::files::download_file).delete(handlers::files::delete_file),
         )
         .route("/files/view/:id", get(handlers::files::view_file))
+        .layer(GovernorLayer {
+            config: general_governor_config,
+        });
+
+    let api_routes = credential_routes
+        .merge(general_routes)
+        .layer(
+            ServiceBuilder::new()
+                .layer(RequestBodyLimitLayer::new(MAX_BODY_BYTES))
+                .layer(axum::middleware::map_response(security_headers)),
+        )
         .with_state(state);
 
     // Mirrors the Java service's `server.servlet.context-path: /api`.
     Router::new().nest("/api", api_routes).layer(cors)
+}
+
+/// Restores the response headers Spring Security was adding by default in
+/// the Java version (confirmed via a live boot log), since axum sends none
+/// of these unless explicitly set.
+async fn security_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    headers.insert("x-xss-protection", HeaderValue::from_static("0"));
+    headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        "cache-control",
+        HeaderValue::from_static("no-cache, no-store, max-age=0, must-revalidate"),
+    );
+    headers.insert("pragma", HeaderValue::from_static("no-cache"));
+    response
+}
+
+/// The keyed rate-limit store grows one entry per distinct client key seen;
+/// without periodic cleanup that's unbounded memory growth from an attacker
+/// cycling source IPs. Mirrors the cleanup pattern from tower_governor's own
+/// example, just as a tokio task instead of a raw thread.
+fn spawn_governor_cleanup(
+    config: Arc<tower_governor::governor::GovernorConfig<SmartIpKeyExtractor, governor::middleware::NoOpMiddleware>>,
+) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            config.limiter().retain_recent();
+        }
+    });
 }

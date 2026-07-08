@@ -10,10 +10,6 @@ use crate::{error::AppError, jwt, state::AppState};
 
 /// Authenticated principal derived from a validated JWT. Mirrors what
 /// `JwtAuthenticationFilter` used to populate on the Spring SecurityContext.
-/// `user_id`/`username` aren't read by any handler yet (none of the ported
-/// endpoints do ownership checks, only role checks) but are kept since
-/// they're part of what a validated token actually asserts.
-#[allow(dead_code)]
 pub struct AuthUser {
     pub user_id: String,
     pub username: String,
@@ -72,6 +68,13 @@ impl AuthUser {
         if allowed.iter().any(|r| r.to_uppercase() == role_upper) {
             Ok(())
         } else {
+            tracing::warn!(
+                user_id = %self.user_id,
+                username = %self.username,
+                role = %self.role,
+                required = ?allowed,
+                "access denied: role not permitted"
+            );
             Err(AppError::Forbidden("Access denied".to_string()))
         }
     }

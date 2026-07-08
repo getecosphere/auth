@@ -62,7 +62,7 @@ Base path is still `/api` (mirrors the old `server.servlet.context-path`).
 - `POST /auth/login` — JSON body `{username, password}`
 - `POST /auth/register` — query params `username, email, password, name, role?` (default `member`)
 - `POST /auth/register-with-profile` — query params `email, password, name` (whatsappNumber/province no longer accepted here — see lms-backend notes)
-- `PUT /auth/change-password` — query params `userId, newPassword`
+- `PUT /auth/change-password` — **requires a bearer token**; query params `currentPassword, newPassword`. Target user is the authenticated principal, not a client-supplied id (see Security hardening).
 - `POST /auth/users/check-existence` — JSON body `{usernames: [...]}, response {existing: [...]}`
 - `GET /auth/users/{id}` — **new**, internal identity lookup for lms-backend (id/username/email/name/role/avatarUrl/coverPhotoUrl/timestamps, no passwordHash)
 - `GET /auth/users/username/{username}` — **new**, same but by username
@@ -151,6 +151,99 @@ uses, chosen instead of a shared event contract:
   timestamps) — profile fields are simply absent rather than `null`, same
   as Jackson's `NON_NULL` behavior the Java DTOs already used.
 
+## Security hardening
+
+Two vulnerabilities were found and fixed during this rewrite that were
+**not introduced by it** — both existed in the original Java `main` branch
+too and should be patched there independently of any decision to cut over
+to Rust:
+
+1. **`change-password` had no authentication at all.** `PUT
+   /auth/change-password?userId=X&newPassword=Y` was `permitAll()` in
+   Spring Security with no old-password check — anyone who knew or guessed
+   a userId could set that account's password. Confirmed unused by the
+   frontend (`git grep` found no caller), so fixed here with no
+   compatibility cost: the endpoint now requires a valid bearer token, acts
+   only on the authenticated principal's own account (no client-supplied
+   userId), and requires `currentPassword` to verify before accepting
+   `newPassword`.
+2. **`register`/`register-with-profile` let anyone take over an existing
+   account.** Both returned a valid session for the *existing* user when
+   the submitted username/email already existed, without checking the
+   submitted password matched. Anyone who knew a target's username or email
+   could log in as them. Fixed by returning `409 Conflict` instead. This
+   also means retrying a setup call after a network hiccup, where auth's
+   registration actually succeeded but the response was lost, now surfaces
+   as an error instead of silently succeeding a second time — a legitimate
+   idempotency use case traded for the security fix, and one no code in
+   this estate currently depends on (`SetupService` only ever calls
+   register once, guarded by its own `AppConfig` existence check).
+
+**If `main` is still deployed anywhere, both of these should be treated as
+live, exploitable account-takeover bugs independent of this rewrite.**
+
+Everything below is new hardening added specifically for the rewrite, on
+top of the fixes above:
+
+- **Timing-safe login.** The Java version (and this port, initially)
+  returned immediately on "username not found," skipping the bcrypt
+  comparison that the "wrong password" path pays for — response time alone
+  reveals whether a username exists. Login now always runs a bcrypt verify,
+  against a fixed dummy hash when the user doesn't exist, so timing is the
+  same either way.
+- **JWT_SECRET fails fast.** The Java (and initial Rust) config silently
+  fell back to a known placeholder (`your-secret-key-change-in-production`)
+  if the env var was unset. The service now refuses to start if
+  `JWT_SECRET` is missing, empty, a known placeholder, or under 32 bytes
+  (warns below the HS512-recommended 64).
+- **Per-IP rate limiting** (`tower_governor`, keyed by
+  `X-Forwarded-For`/`X-Real-IP`/`Forwarded` with a peer-IP fallback — see
+  the caveat below). Login, register, register-with-profile, and
+  change-password share a strict limiter (burst 5, replenishing 1 per 10s).
+  Everything else gets a generous default (burst 30, replenishing 1/s).
+  **This trusts forwarding headers and must only be deployed behind a
+  reverse proxy that sets them correctly** (Caddy's `reverse_proxy` does by
+  default) — directly internet-facing, it'd be trivially bypassable by
+  spoofing the header.
+- **Security response headers** restored to parity with what Spring
+  Security was adding by default (confirmed via a live boot log):
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `X-XSS-Protection: 0`, `Referrer-Policy: no-referrer`, and
+  `Cache-Control: no-cache, no-store, max-age=0, must-revalidate` on every
+  response.
+- **Request body size cap** (10MB) via `RequestBodyLimitLayer`, applied
+  globally.
+- **Server-side password strength** — minimum 8 characters, enforced on
+  register, register-with-profile, and change-password. The frontend's own
+  signup check is weaker (6) and doesn't matter for API callers who bypass
+  the UI; this is now enforced where it can't be skipped.
+- **Decompression-bomb guard on avatar/cover upload.** A small, highly
+  compressed file can still decode to a huge pixel buffer. Image dimensions
+  are now read from the format header alone (no pixel decode) and rejected
+  above 30 megapixels *before* the expensive full decode + WebP re-encode
+  runs.
+- **Audit logging** (`tracing::warn!`, never logging credentials): failed
+  logins, register conflicts, role-denied (403) actions, and account
+  deactivations, each with the relevant user id/username and requested
+  role where applicable.
+
+### Not done, and why
+
+- **Persistent/distributed account lockout** after N failed attempts was
+  considered and deliberately not built. Rate limiting already covers the
+  common case for a single-instance-per-estate deployment (eco's "one CT =
+  one estate" model), and a lockout mechanism keyed on username is itself a
+  denial-of-service vector (an attacker who knows a username can lock the
+  real owner out by deliberately failing their login repeatedly). Worth
+  revisiting if rate limiting proves insufficient in practice.
+- **Token revocation / logout.** JWTs remain purely stateless with no
+  blacklist, same as the Java version — not a regression, just not
+  addressed here. A short-lived-access-token + refresh-token pattern would
+  be the real fix, but is a bigger design change than this rewrite's scope.
+- **TLS termination** is intentionally not in this app — matches the Java
+  version (`ssl.enabled: false`) and eco's architecture, where the estate
+  gateway (Caddy) and Cloudflare Tunnel own TLS.
+
 ## Running both services together locally
 
 ```
@@ -168,6 +261,14 @@ auth), login/register JWT round-trip, password change, avatar upload with
 live composition into lms's profile view, role-gated account deactivation,
 and lazy profile hydration in lms for a user it had never seen (registered
 directly against auth).
+
+Security fixes verified directly: register conflict returns 409 with no
+session instead of logging in as the existing account; change-password
+rejects unauthenticated requests (401) and wrong current passwords (400);
+security headers present on every response; rate limiter returns 429 after
+the configured burst and recovers after the replenish window; a
+20000x20000-declared PNG with negligible actual pixel data is rejected
+before decode instead of being processed.
 
 ## Cutover notes (not done as part of this branch)
 

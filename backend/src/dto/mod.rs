@@ -74,10 +74,13 @@ pub struct RegisterWithProfileQuery {
     pub name: String,
 }
 
+/// Target user comes from the authenticated JWT, not a client-supplied id --
+/// the old contract accepted an arbitrary userId with no auth at all, which
+/// let anyone change anyone's password.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangePasswordQuery {
-    pub user_id: String,
+    pub current_password: String,
     pub new_password: String,
 }
 

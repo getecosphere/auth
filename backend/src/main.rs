@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let config = AppConfig::from_env();
+    let config = AppConfig::from_env()?;
 
     let client = mongodb::Client::with_uri_str(&config.mongodb_uri).await?;
     let db = client
@@ -37,7 +37,16 @@ async fn main() -> anyhow::Result<()> {
     let app = routes::build_router(state);
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.server_port)).await?;
-    axum::serve(listener, app).await?;
+    // Rate limiting's SmartIpKeyExtractor falls back to the TCP peer address
+    // when no x-forwarded-for/x-real-ip/forwarded header is present, which
+    // requires ConnectInfo to be available -- without this, requests with
+    // none of those headers (e.g. direct local access) would be rejected
+    // outright instead of just rate-limited by peer IP.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
