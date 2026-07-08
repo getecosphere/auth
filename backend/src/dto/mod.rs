@@ -1,0 +1,92 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::models::user::User;
+
+/// Credential-domain view of a user. Only carries fields auth actually owns;
+/// profile fields (bio, experiences, ...) live in lms-backend now and are
+/// intentionally absent rather than sent as null.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserDto {
+    pub id: String,
+    pub name: String,
+    pub username: String,
+    pub email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_photo_url: Option<String>,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<&User> for UserDto {
+    fn from(user: &User) -> Self {
+        UserDto {
+            id: user.id_string(),
+            name: user.name.clone(),
+            username: user.username.clone(),
+            email: user.email.clone(),
+            avatar_url: user.avatar_url.clone(),
+            cover_photo_url: user.cover_photo_url.clone(),
+            role: user.role.clone(),
+            created_at: user.created_at.to_chrono(),
+            updated_at: user.updated_at.to_chrono(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthResponse {
+    pub token: String,
+    pub user: UserDto,
+    pub expires_in: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterQuery {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+    pub name: String,
+    pub role: Option<String>,
+}
+
+/// whatsappNumber/province used to live on this same request in the Java
+/// version, but those are profile fields owned by lms-backend now — the
+/// frontend sends them to lms's profile endpoint in a follow-up call instead
+/// of auth silently accepting and discarding them.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterWithProfileQuery {
+    pub email: String,
+    pub password: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePasswordQuery {
+    pub user_id: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheckUsernameRequest {
+    pub usernames: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CheckUsernameResponse {
+    pub existing: Vec<String>,
+}

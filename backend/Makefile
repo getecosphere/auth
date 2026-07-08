@@ -1,17 +1,15 @@
-.PHONY: help setup setup-mac setup-windows setup-linux install build run test clean logs stop start verify
+.PHONY: help setup install build run test clean logs stop verify
 
 help:
-	@echo "RWID Community API - Development Commands"
-	@echo "=========================================="
+	@echo "RWID Auth Service (Rust) - Development Commands"
+	@echo "================================================="
 	@echo ""
 	@echo "Setup Commands:"
-	@echo "  make setup-mac       - Setup for macOS"
-	@echo "  make setup-windows   - Setup for Windows"
-	@echo "  make setup-linux     - Setup for Linux"
+	@echo "  make setup           - Check for the Rust toolchain"
 	@echo ""
 	@echo "Development Commands:"
-	@echo "  make install         - Install dependencies"
-	@echo "  make build           - Build the project"
+	@echo "  make install         - Fetch dependencies"
+	@echo "  make build           - Build the project (release)"
 	@echo "  make run             - Run the application"
 	@echo "  make test            - Run tests"
 	@echo "  make clean           - Clean build artifacts"
@@ -22,44 +20,31 @@ help:
 	@echo "  make verify          - Verify MongoDB connection"
 	@echo ""
 
-setup-mac:
-	@echo "Setting up for macOS..."
-	@chmod +x scripts/setup-dev.sh
-	@./scripts/setup-dev.sh
-
-setup-windows:
-	@echo "Setting up for Windows..."
-	@echo "Please run: scripts\setup-dev.bat (as Administrator)"
-
-setup-linux:
-	@echo "Setting up for Linux..."
-	@chmod +x scripts/setup-dev-linux.sh
-	@sudo ./scripts/setup-dev-linux.sh
+setup:
+	@echo "Checking for the Rust toolchain..."
+	@command -v cargo >/dev/null 2>&1 || { echo "Install Rust first: https://rustup.rs"; exit 1; }
+	@rustc --version
+	@cargo --version
 
 install:
-	@echo "Installing dependencies..."
-	@mvn clean install -DskipTests
+	@echo "Fetching dependencies..."
+	@cargo fetch
 
 build:
 	@echo "Building the project..."
-	@mvn clean package -DskipTests
+	@cargo build --release
 
 run:
 	@echo "Starting the application..."
-	@mvn spring-boot:run
+	@cargo run
 
 test:
 	@echo "Running tests..."
-	@mvn test
-
-test-coverage:
-	@echo "Running tests with coverage..."
-	@mvn test jacoco:report
-	@echo "Coverage report: target/site/jacoco/index.html"
+	@cargo test
 
 clean:
 	@echo "Cleaning build artifacts..."
-	@mvn clean
+	@cargo clean
 	@rm -rf logs/
 
 logs:
@@ -68,10 +53,10 @@ logs:
 
 stop:
 	@echo "Stopping the application..."
-	@pkill -f "spring-boot:run" || echo "Application not running"
+	@pkill -f "target/(debug|release)/rwid-auth-service" || echo "Application not running"
 
 verify:
 	@echo "Verifying MongoDB connection..."
-	@mongosh --eval "db.adminCommand('ping')" && echo "✅ MongoDB is running" || echo "❌ MongoDB is not running"
+	@mongosh --eval "db.adminCommand('ping')" && echo "MongoDB is running" || echo "MongoDB is not running"
 
 .DEFAULT_GOAL := help
