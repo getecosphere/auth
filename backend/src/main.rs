@@ -3,7 +3,12 @@ use rwid_auth_service::{config::AppConfig, routes, state::AppState};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
+    // JSON, not the default human-readable text: every field (including
+    // the request_id set by request_id::propagate on the request's span)
+    // ends up as a real, queryable field instead of buried in a formatted
+    // string -- what a log aggregator like Loki actually wants.
     tracing_subscriber::fmt()
+        .json()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info".into()),

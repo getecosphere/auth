@@ -129,7 +129,10 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state);
 
     // Mirrors the Java service's `server.servlet.context-path: /api`.
-    Router::new().nest("/api", api_routes).layer(cors)
+    Router::new()
+        .nest("/api", api_routes)
+        .layer(cors)
+        .layer(axum::middleware::from_fn(crate::request_id::propagate))
 }
 
 /// Restores the response headers Spring Security was adding by default in
