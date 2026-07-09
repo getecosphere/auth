@@ -270,6 +270,24 @@ the configured burst and recovers after the replenish window; a
 20000x20000-declared PNG with negligible actual pixel data is rejected
 before decode instead of being processed.
 
+## Observability (added 2026-07-09)
+
+Logs are structured JSON (`tracing_subscriber::fmt().json()`), not the
+default human-readable text — prep for centralized log aggregation
+(Grafana Loki is the leading candidate, self-hosted alongside the rest of
+the estate rather than a SaaS product, in keeping with `eco`'s host-native
+philosophy).
+
+Every request gets a correlation id (`src/request_id.rs`): reused from an
+incoming `x-request-id` header if present, otherwise a fresh UUID,
+recorded on the request's tracing span (so every JSON log line during
+that request carries it) and echoed back on the response. auth has no
+peer HTTP dependencies, so there's nothing to forward it *to* here, but
+every other domain's `*_client.rs` peer calls now forward this same
+header downstream — so one user action's full cross-service log trail is
+reconstructable from a single `request_id` value, once aggregated
+somewhere queryable.
+
 ## Cutover notes (not done as part of this branch)
 
 - `rwid/rwid_bootstrap/ecompose.yml`'s `auth-backend` service declares
