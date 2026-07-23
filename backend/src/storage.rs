@@ -6,7 +6,7 @@ use std::io::Cursor;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use crate::{error::AppError, models::file::FileRecord, state::AppState};
+use crate::{config::StorageBackend, error::AppError, models::file::FileRecord, s3_storage, state::AppState};
 
 /// Only avatar/cover-photo uploads remain in the auth domain; every other
 /// asset type (course covers, post images, ...) is owned by lms-backend now.
@@ -15,6 +15,56 @@ fn is_avatar_or_cover(file_type: &str) -> bool {
         file_type.to_lowercase().as_str(),
         "avatar" | "avatars" | "cover-photo" | "cover-photos"
     )
+}
+
+/// `storage_path` doubles as the local-disk relative path and the S3
+/// object key -- same identifier either way, just where it resolves to.
+async fn write_bytes(state: &AppState, storage_path: &str, bytes: &[u8], content_type: &str) -> Result<(), AppError> {
+    match state.config.storage_backend {
+        StorageBackend::Local => {
+            let full_path = PathBuf::from(&state.config.storage_local_path).join(storage_path);
+            if let Some(parent) = full_path.parent() {
+                tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
+            }
+            tokio::fs::write(&full_path, bytes).await.map_err(|e| AppError::Internal(e.into()))?;
+        }
+        StorageBackend::S3 => {
+            let client = state.s3_client.as_ref().expect("s3_client set when storage_backend is S3");
+            s3_storage::put_object(client, &state.config.s3_bucket, storage_path, bytes.to_vec(), content_type)
+                .await
+                .map_err(AppError::Internal)?;
+        }
+    }
+    Ok(())
+}
+
+async fn read_bytes(state: &AppState, storage_path: &str) -> Result<Vec<u8>, AppError> {
+    match state.config.storage_backend {
+        StorageBackend::Local => {
+            let full_path = PathBuf::from(&state.config.storage_local_path).join(storage_path);
+            tokio::fs::read(&full_path).await.map_err(|e| AppError::Internal(e.into()))
+        }
+        StorageBackend::S3 => {
+            let client = state.s3_client.as_ref().expect("s3_client set when storage_backend is S3");
+            s3_storage::get_object(client, &state.config.s3_bucket, storage_path)
+                .await
+                .map_err(AppError::Internal)
+        }
+    }
+}
+
+async fn delete_bytes(state: &AppState, storage_path: &str) {
+    match state.config.storage_backend {
+        StorageBackend::Local => {
+            let full_path = PathBuf::from(&state.config.storage_local_path).join(storage_path);
+            let _ = tokio::fs::remove_file(&full_path).await;
+        }
+        StorageBackend::S3 => {
+            if let Some(client) = state.s3_client.as_ref() {
+                let _ = s3_storage::delete_object(client, &state.config.s3_bucket, storage_path).await;
+            }
+        }
+    }
 }
 
 /// A tiny, highly-compressed file (well within the request body limit) can
@@ -74,15 +124,7 @@ pub async fn upload_identity_image(
 
     let filename = format!("{}.webp", Uuid::new_v4());
     let storage_path = format!("{file_type}/{user_id}/{filename}");
-    let full_path = PathBuf::from(&state.config.storage_local_path)
-        .join(file_type)
-        .join(user_id);
-    tokio::fs::create_dir_all(&full_path)
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?;
-    tokio::fs::write(full_path.join(&filename), &webp_bytes)
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?;
+    write_bytes(state, &storage_path, &webp_bytes, "image/webp").await?;
 
     let record = FileRecord {
         id: None,
@@ -119,10 +161,7 @@ pub struct StoredFile {
 
 pub async fn read_file(state: &AppState, file_id: &str) -> Result<StoredFile, AppError> {
     let record = find_file(state, file_id).await?;
-    let full_path = PathBuf::from(&state.config.storage_local_path).join(&record.storage_path);
-    let bytes = tokio::fs::read(&full_path)
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?;
+    let bytes = read_bytes(state, &record.storage_path).await?;
     Ok(StoredFile {
         content_type: content_type_for(&record.filename),
         bytes,
@@ -131,8 +170,7 @@ pub async fn read_file(state: &AppState, file_id: &str) -> Result<StoredFile, Ap
 
 pub async fn delete_file(state: &AppState, file_id: &str) -> Result<(), AppError> {
     let record = find_file(state, file_id).await?;
-    let full_path = PathBuf::from(&state.config.storage_local_path).join(&record.storage_path);
-    let _ = tokio::fs::remove_file(&full_path).await;
+    delete_bytes(state, &record.storage_path).await;
 
     let files: Collection<FileRecord> = state.db.collection("files");
     let oid = ObjectId::parse_str(file_id)

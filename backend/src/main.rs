@@ -1,4 +1,8 @@
-use rwid_auth_service::{config::AppConfig, routes, state::AppState};
+use rwid_auth_service::{
+    config::{AppConfig, StorageBackend},
+    routes, s3_storage,
+    state::AppState,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -25,6 +29,15 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(port = config.server_port, "starting rwid-auth-service");
 
     let state = AppState::new(db, config.clone());
+
+    // Fail fast if S3 is misconfigured -- an unreachable bucket should
+    // stop startup, not surface as a mysterious 500 on the first upload.
+    if config.storage_backend == StorageBackend::S3 {
+        let client = state.s3_client.as_ref().expect("s3_client set when storage_backend is S3");
+        s3_storage::ensure_bucket(client, &config.s3_bucket).await?;
+        tracing::info!(bucket = %config.s3_bucket, endpoint = %config.s3_endpoint, "using S3 storage backend");
+    }
+
     let app = routes::build_router(state);
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.server_port)).await?;

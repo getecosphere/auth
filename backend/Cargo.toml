@@ -25,6 +25,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 tower_governor = "0.4.2"
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
 governor = "0.6"
+aws-sdk-s3 = "1"
 
 [profile.release]
 opt-level = 3

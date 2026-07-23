@@ -13,6 +13,7 @@ pub mod models;
 pub mod password;
 pub mod request_id;
 pub mod routes;
+pub mod s3_storage;
 pub mod state;
 pub mod storage;
 pub mod user_repo;
