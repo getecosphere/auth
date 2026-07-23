@@ -15,18 +15,6 @@ use tower_http::{
 
 use crate::{handlers, state::AppState};
 
-/// Generous everyday limit: allows normal page-load bursts of API calls
-/// without being annoying, while still bounding sustained abuse.
-const GENERAL_BURST: u32 = 30;
-const GENERAL_REPLENISH_SECS: u64 = 1;
-
-/// Tight limit for credential-related endpoints (login, register,
-/// register-with-profile, change-password): a few rapid attempts are
-/// tolerated (typo retries), sustained attempts are throttled hard to blunt
-/// brute force / credential stuffing.
-const AUTH_BURST: u32 = 5;
-const AUTH_REPLENISH_SECS: u64 = 10;
-
 /// Multipart avatar/cover uploads decode+re-encode a whole image in memory;
 /// this is generous for a profile photo but bounds worst-case allocation
 /// from the raw upload size (the decompression-bomb guard in storage.rs
@@ -64,8 +52,8 @@ pub fn build_router(state: AppState) -> Router {
     let auth_governor_config = Arc::new(
         GovernorConfigBuilder::default()
             .key_extractor(SmartIpKeyExtractor)
-            .per_second(AUTH_REPLENISH_SECS)
-            .burst_size(AUTH_BURST)
+            .per_second(state.config.rate_limit_auth_replenish_secs)
+            .burst_size(state.config.rate_limit_auth_burst)
             .finish()
             .expect("valid governor config"),
     );
@@ -74,8 +62,8 @@ pub fn build_router(state: AppState) -> Router {
     let general_governor_config = Arc::new(
         GovernorConfigBuilder::default()
             .key_extractor(SmartIpKeyExtractor)
-            .per_second(GENERAL_REPLENISH_SECS)
-            .burst_size(GENERAL_BURST)
+            .per_second(state.config.rate_limit_general_replenish_secs)
+            .burst_size(state.config.rate_limit_general_burst)
             .finish()
             .expect("valid governor config"),
     );
