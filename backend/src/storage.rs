@@ -1,6 +1,6 @@
 use bson::{doc, oid::ObjectId};
 use chrono::Utc;
-use image::{codecs::webp::WebPEncoder, ExtendedColorType, ImageEncoder, ImageReader};
+use image::ImageReader;
 use mongodb::Collection;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -117,10 +117,13 @@ pub async fn upload_identity_image(
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
 
-    let mut webp_bytes: Vec<u8> = Vec::new();
-    WebPEncoder::new_lossless(&mut webp_bytes)
-        .write_image(&rgba, width, height, ExtendedColorType::Rgba8)
-        .map_err(|e| AppError::BadRequest(format!("Failed to convert image to WebP: {e}")))?;
+    // Lossy, not lossless: this crate wraps real libwebp, unlike the
+    // `image` crate's own WebP encoder (image-webp), which is lossless-
+    // only. Lossless-recompressing a JPEG (already lossy) routinely
+    // inflates the file several times over instead of shrinking it --
+    // quality 80 keeps visual fidelity close to the source while actually
+    // achieving the compression the format is chosen for.
+    let webp_bytes = webp::Encoder::from_rgba(&rgba, width, height).encode(80.0).to_vec();
 
     let filename = format!("{}.webp", Uuid::new_v4());
     let storage_path = format!("{file_type}/{user_id}/{filename}");

@@ -26,6 +26,7 @@ tower_governor = "0.4.2"
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
 governor = "0.6"
 aws-sdk-s3 = "1"
+webp = "0.3"
 
 [profile.release]
 opt-level = 3
