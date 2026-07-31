@@ -29,7 +29,13 @@ pub async fn login(
 ) -> AppResult<Json<AuthResponse>> {
     require_non_blank(&[("username", &req.username), ("password", &req.password)])?;
 
-    let user = user_repo::find_by_username(&state, &req.username).await?;
+    // APINDO's login screen has historically accepted email as its primary
+    // identifier. Keep the shared auth contract compatible with that UX while
+    // still allowing users from other estates to sign in by username.
+    let user = match user_repo::find_by_username(&state, &req.username).await? {
+        Some(user) => Some(user),
+        None => user_repo::find_by_email(&state, &req.username).await?,
+    };
     let password_hash = user
         .as_ref()
         .map(|u| u.password_hash.as_str())
@@ -49,7 +55,7 @@ pub async fn login(
 
 pub async fn register(
     State(state): State<AppState>,
-    Query(req): Query<RegisterQuery>,
+    Json(req): Json<RegisterQuery>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
     require_non_blank(&[
         ("username", &req.username),
@@ -78,7 +84,7 @@ pub async fn register(
 
 pub async fn register_with_profile(
     State(state): State<AppState>,
-    Query(req): Query<RegisterWithProfileQuery>,
+    Json(req): Json<RegisterWithProfileQuery>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
     require_non_blank(&[
         ("email", &req.email),
