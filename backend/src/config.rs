@@ -55,6 +55,12 @@ pub struct AppConfig {
     /// one exists to blunt brute force / credential stuffing.
     pub rate_limit_auth_burst: u32,
     pub rate_limit_auth_replenish_secs: u64,
+    pub email_verification_required: bool,
+    pub email_verification_ttl_hours: i64,
+    pub brevo_api_key: String,
+    pub mail_from_email: String,
+    pub mail_from_name: String,
+    pub auth_public_url: String,
 }
 
 impl AppConfig {
@@ -160,6 +166,15 @@ impl AppConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
+            email_verification_required: env::var("EMAIL_VERIFICATION_REQUIRED")
+                .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(true),
+            email_verification_ttl_hours: env::var("EMAIL_VERIFICATION_TTL_HOURS")
+                .ok().and_then(|v| v.parse().ok()).unwrap_or(24),
+            brevo_api_key: env::var("BREVO_API_KEY").unwrap_or_default(),
+            mail_from_email: env::var("MAIL_FROM_EMAIL").unwrap_or_default(),
+            mail_from_name: env::var("MAIL_FROM_NAME").unwrap_or_else(|_| "Auth".to_string()),
+            auth_public_url: env::var("AUTH_PUBLIC_URL").unwrap_or_default(),
         })
     }
 }

@@ -7,11 +7,11 @@ use axum::{
 use crate::{
     auth_extractor::AuthUser,
     dto::{
-        AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse,
+        AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse, EmailVerificationStatus,
         LoginRequest, RegisterQuery, RegisterWithProfileQuery, UserDto,
     },
     error::{require_non_blank, require_password_strength, AppError, AppResult},
-    jwt, password,
+    email_verification, jwt, password,
     state::AppState,
     user_repo,
 };
@@ -90,6 +90,7 @@ pub async fn register(
     let user = user_repo::insert_user(&state, &req.username, &req.email, &hashed, &req.name, &role)
         .await?;
 
+    email_verification::send_for_user(&state, &user).await?;
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
 }
@@ -124,8 +125,34 @@ pub async fn register_with_profile(
     let user =
         user_repo::insert_user(&state, &username, &req.email, &hashed, &req.name, "member").await?;
 
+    email_verification::send_for_user(&state, &user).await?;
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> AppResult<Json<serde_json::Value>> {
+    let token = query.get("token").ok_or_else(|| AppError::BadRequest("Verification token is required".into()))?;
+    email_verification::verify(&state, token).await?;
+    Ok(Json(serde_json::json!({ "verified": true, "message": "Email berhasil diverifikasi. Kamu sekarang dapat menggunakan Marketplace dan negosiasi." })))
+}
+
+pub async fn resend_verification(State(state): State<AppState>, auth: AuthUser) -> AppResult<StatusCode> {
+    let user = user_repo::find_by_id(&state, &auth.user_id).await?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    email_verification::send_for_user(&state, &user).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+pub async fn verification_status(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<EmailVerificationStatus>> {
+    let user = user_repo::find_by_id(&state, &auth.user_id).await?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    Ok(Json(EmailVerificationStatus {
+        email_verified: !state.config.email_verification_required || user.email_verified_at.is_some(),
+        verification_expires_in_seconds: state.config.email_verification_ttl_hours * 3600,
+    }))
 }
 
 pub async fn change_password(

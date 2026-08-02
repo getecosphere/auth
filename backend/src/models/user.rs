@@ -22,6 +22,8 @@ pub struct User {
     pub password_hash: String,
     pub name: String,
     pub role: String,
+    #[serde(rename = "emailVerifiedAt", skip_serializing_if = "Option::is_none")]
+    pub email_verified_at: Option<bson::DateTime>,
     #[serde(rename = "avatarUrl", skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
     #[serde(rename = "coverPhotoUrl", skip_serializing_if = "Option::is_none")]

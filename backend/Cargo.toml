@@ -27,6 +27,7 @@ tower = { version = "0.5.3", default-features = false, features = ["util"] }
 governor = "0.6"
 aws-sdk-s3 = "1"
 webp = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [profile.release]
 opt-level = 3

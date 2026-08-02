@@ -6,6 +6,7 @@
 pub mod auth_extractor;
 pub mod config;
 pub mod dto;
+pub mod email_verification;
 pub mod error;
 pub mod handlers;
 pub mod jwt;

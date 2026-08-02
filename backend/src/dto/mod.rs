@@ -13,6 +13,7 @@ pub struct UserDto {
     pub name: String,
     pub username: String,
     pub email: String,
+    pub email_verified: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,6 +30,7 @@ impl From<&User> for UserDto {
             name: user.name.clone(),
             username: user.username.clone(),
             email: user.email.clone(),
+            email_verified: user.email_verified_at.is_some(),
             avatar_url: user.avatar_url.clone(),
             cover_photo_url: user.cover_photo_url.clone(),
             role: user.role.clone(),
@@ -50,6 +52,13 @@ pub struct AuthResponse {
     pub token: String,
     pub user: UserDto,
     pub expires_in: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailVerificationStatus {
+    pub email_verified: bool,
+    pub verification_expires_in_seconds: i64,
 }
 
 #[derive(Debug, Deserialize)]

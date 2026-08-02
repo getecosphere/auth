@@ -56,6 +56,7 @@ pub async fn insert_user(
         password_hash: password_hash.to_string(),
         name: name.to_string(),
         role: role.to_string(),
+        email_verified_at: None,
         avatar_url: None,
         cover_photo_url: None,
         created_at: now,
@@ -71,6 +72,17 @@ pub async fn insert_user(
         id: Some(id),
         ..user
     })
+}
+
+pub async fn mark_email_verified(state: &AppState, id: &str) -> Result<(), AppError> {
+    let oid = ObjectId::parse_str(id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
+    users(state).update_one(
+        doc! { "_id": oid, "deletedAt": null },
+        doc! { "$set": { "emailVerifiedAt": bson::DateTime::now(), "updatedAt": bson::DateTime::now() } },
+        None,
+    ).await?;
+    Ok(())
 }
 
 pub async fn update_password(
