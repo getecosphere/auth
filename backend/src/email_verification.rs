@@ -47,7 +47,10 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<Option<St
     };
     verifications(state).update_many(doc! { "userId": &record.user_id, "usedAt": null }, doc! { "$set": { "usedAt": DateTime::now() } }, None).await?;
     verifications(state).insert_one(&record, None).await?;
-    let url = format!("{}/auth/verify-email?token={}.{}", state.config.auth_public_url.trim_end_matches('/'), record.id, secret);
+    // Astro emits this route as auth/verify-email/index.html. Keep the
+    // trailing slash so a static production server resolves that directory
+    // rather than falling back to the application's root page.
+    let url = format!("{}/auth/verify-email/?token={}.{}", state.config.auth_public_url.trim_end_matches('/'), record.id, secret);
     let body = serde_json::json!({
         "sender": { "email": state.config.mail_from_email, "name": state.config.mail_from_name },
         "to": [{ "email": user.email, "name": user.name }],
