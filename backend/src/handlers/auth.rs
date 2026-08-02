@@ -149,11 +149,21 @@ pub async fn verify_email(
     Ok(Json(serde_json::json!({ "verified": true, "message": "Email berhasil diverifikasi. Kamu sekarang dapat menggunakan Marketplace dan negosiasi." })))
 }
 
-pub async fn resend_verification(State(state): State<AppState>, auth: AuthUser) -> AppResult<StatusCode> {
+pub async fn resend_verification(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
     let user = user_repo::find_by_id(&state, &auth.user_id).await?
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-    email_verification::send_for_user(&state, &user).await?;
-    Ok(StatusCode::ACCEPTED)
+    let message_id = email_verification::send_for_user(&state, &user).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "accepted": true,
+            "messageId": message_id,
+            "message": "Permintaan email verifikasi diterima oleh Brevo. Periksa inbox dan folder spam."
+        })),
+    ))
 }
 
 pub async fn verification_status(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<EmailVerificationStatus>> {

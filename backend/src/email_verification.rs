@@ -30,9 +30,12 @@ pub fn ensure_delivery_configured(config: &AppConfig) -> AppResult<()> {
     Ok(())
 }
 
-pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<()> {
+/// Sends a verification request to Brevo and returns Brevo's message id when
+/// available. A successful API response means Brevo accepted the message for
+/// delivery; it deliberately does not claim inbox delivery.
+pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<Option<String>> {
     if !state.config.email_verification_required || user.email_verified_at.is_some() {
-        return Ok(());
+        return Ok(None);
     }
     ensure_delivery_configured(&state.config)?;
     let secret = Uuid::new_v4().to_string();
@@ -54,10 +57,22 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<()> {
     let response = reqwest::Client::new().post("https://api.brevo.com/v3/smtp/email")
         .header("api-key", &state.config.brevo_api_key).json(&body).send().await
         .map_err(|e| AppError::Internal(e.into()))?;
-    if !response.status().is_success() {
-        return Err(AppError::Internal(anyhow::anyhow!("Brevo rejected verification email: {}", response.status())));
+    let status = response.status();
+    let response_body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        tracing::error!(%status, response = %response_body, "Brevo rejected verification email");
+        return Err(AppError::Internal(anyhow::anyhow!("Brevo rejected verification email: {status}")));
     }
-    Ok(())
+    let message_id = serde_json::from_str::<serde_json::Value>(&response_body)
+        .ok()
+        .and_then(|value| value.get("messageId").and_then(|id| id.as_str()).map(str::to_owned));
+    tracing::info!(
+        user_id = %user.id_string(),
+        email = %user.email,
+        message_id = message_id.as_deref().unwrap_or("unavailable"),
+        "Brevo accepted verification email"
+    );
+    Ok(message_id)
 }
 
 pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> {
