@@ -90,6 +90,19 @@ pub async fn update_password(
     Ok(())
 }
 
+pub async fn update_name(state: &AppState, id: &str, name: &str) -> Result<(), AppError> {
+    let oid = ObjectId::parse_str(id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
+    users(state)
+        .update_one(
+            doc! { "_id": oid, "deletedAt": null },
+            doc! { "$set": { "name": name, "updatedAt": bson::DateTime::now() } },
+            None,
+        )
+        .await?;
+    Ok(())
+}
+
 pub async fn update_avatar_url(state: &AppState, id: &str, url: &str) -> Result<(), AppError> {
     let oid = ObjectId::parse_str(id)
         .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;

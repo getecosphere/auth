@@ -155,6 +155,19 @@ pub async fn change_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn update_identity(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(req): Json<crate::dto::UpdateIdentityRequest>,
+) -> AppResult<Json<UserDto>> {
+    require_non_blank(&[("name", &req.name)])?;
+    user_repo::update_name(&state, &auth.user_id, req.name.trim()).await?;
+    let user = user_repo::find_by_id(&state, &auth.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("User not found: {}", auth.user_id)))?;
+    Ok(Json(UserDto::from(&user)))
+}
+
 pub async fn check_existence(
     State(state): State<AppState>,
     Json(req): Json<CheckUsernameRequest>,

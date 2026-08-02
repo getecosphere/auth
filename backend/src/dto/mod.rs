@@ -84,6 +84,14 @@ pub struct ChangePasswordQuery {
     pub new_password: String,
 }
 
+/// Identity fields belong to Auth. The authenticated subject is the only
+/// target; callers never supply an arbitrary user id.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateIdentityRequest {
+    pub name: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CheckUsernameRequest {
     pub usernames: Vec<String>,
