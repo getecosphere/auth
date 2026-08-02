@@ -21,7 +21,11 @@ impl AppState {
             StorageBackend::S3 => Some(crate::s3_storage::build_client(&config)),
             StorageBackend::Local => None,
         };
-        AppState(Arc::new(AppStateInner { db, config, s3_client }))
+        AppState(Arc::new(AppStateInner {
+            db,
+            config,
+            s3_client,
+        }))
     }
 }
 

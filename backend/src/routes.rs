@@ -7,7 +7,9 @@ use axum::{
     Router,
 };
 use tower::ServiceBuilder;
-use tower_governor::{governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer};
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
     limit::RequestBodyLimitLayer,
@@ -76,7 +78,10 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/register-with-profile",
             post(handlers::auth::register_with_profile),
         )
-        .route("/auth/change-password", put(handlers::auth::change_password))
+        .route(
+            "/auth/change-password",
+            put(handlers::auth::change_password),
+        )
         .layer(GovernorLayer {
             config: auth_governor_config,
         });
@@ -128,7 +133,10 @@ pub fn build_router(state: AppState) -> Router {
 /// of these unless explicitly set.
 async fn security_headers(mut response: Response) -> Response {
     let headers = response.headers_mut();
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     headers.insert("x-xss-protection", HeaderValue::from_static("0"));
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
@@ -145,7 +153,12 @@ async fn security_headers(mut response: Response) -> Response {
 /// cycling source IPs. Mirrors the cleanup pattern from tower_governor's own
 /// example, just as a tokio task instead of a raw thread.
 fn spawn_governor_cleanup(
-    config: Arc<tower_governor::governor::GovernorConfig<SmartIpKeyExtractor, governor::middleware::NoOpMiddleware>>,
+    config: Arc<
+        tower_governor::governor::GovernorConfig<
+            SmartIpKeyExtractor,
+            governor::middleware::NoOpMiddleware,
+        >,
+    >,
 ) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));

@@ -67,10 +67,17 @@ pub async fn insert_user(
         .inserted_id
         .as_object_id()
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("insert did not return an ObjectId")))?;
-    Ok(User { id: Some(id), ..user })
+    Ok(User {
+        id: Some(id),
+        ..user
+    })
 }
 
-pub async fn update_password(state: &AppState, id: &str, password_hash: &str) -> Result<(), AppError> {
+pub async fn update_password(
+    state: &AppState,
+    id: &str,
+    password_hash: &str,
+) -> Result<(), AppError> {
     let oid = ObjectId::parse_str(id)
         .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
     users(state)

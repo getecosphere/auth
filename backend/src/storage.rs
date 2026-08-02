@@ -6,7 +6,9 @@ use std::io::Cursor;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use crate::{config::StorageBackend, error::AppError, models::file::FileRecord, s3_storage, state::AppState};
+use crate::{
+    config::StorageBackend, error::AppError, models::file::FileRecord, s3_storage, state::AppState,
+};
 
 /// Only avatar/cover-photo uploads remain in the auth domain; every other
 /// asset type (course covers, post images, ...) is owned by lms-backend now.
@@ -19,20 +21,38 @@ fn is_avatar_or_cover(file_type: &str) -> bool {
 
 /// `storage_path` doubles as the local-disk relative path and the S3
 /// object key -- same identifier either way, just where it resolves to.
-async fn write_bytes(state: &AppState, storage_path: &str, bytes: &[u8], content_type: &str) -> Result<(), AppError> {
+async fn write_bytes(
+    state: &AppState,
+    storage_path: &str,
+    bytes: &[u8],
+    content_type: &str,
+) -> Result<(), AppError> {
     match state.config.storage_backend {
         StorageBackend::Local => {
             let full_path = PathBuf::from(&state.config.storage_local_path).join(storage_path);
             if let Some(parent) = full_path.parent() {
-                tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|e| AppError::Internal(e.into()))?;
             }
-            tokio::fs::write(&full_path, bytes).await.map_err(|e| AppError::Internal(e.into()))?;
+            tokio::fs::write(&full_path, bytes)
+                .await
+                .map_err(|e| AppError::Internal(e.into()))?;
         }
         StorageBackend::S3 => {
-            let client = state.s3_client.as_ref().expect("s3_client set when storage_backend is S3");
-            s3_storage::put_object(client, &state.config.s3_bucket, storage_path, bytes.to_vec(), content_type)
-                .await
-                .map_err(AppError::Internal)?;
+            let client = state
+                .s3_client
+                .as_ref()
+                .expect("s3_client set when storage_backend is S3");
+            s3_storage::put_object(
+                client,
+                &state.config.s3_bucket,
+                storage_path,
+                bytes.to_vec(),
+                content_type,
+            )
+            .await
+            .map_err(AppError::Internal)?;
         }
     }
     Ok(())
@@ -42,10 +62,15 @@ async fn read_bytes(state: &AppState, storage_path: &str) -> Result<Vec<u8>, App
     match state.config.storage_backend {
         StorageBackend::Local => {
             let full_path = PathBuf::from(&state.config.storage_local_path).join(storage_path);
-            tokio::fs::read(&full_path).await.map_err(|e| AppError::Internal(e.into()))
+            tokio::fs::read(&full_path)
+                .await
+                .map_err(|e| AppError::Internal(e.into()))
         }
         StorageBackend::S3 => {
-            let client = state.s3_client.as_ref().expect("s3_client set when storage_backend is S3");
+            let client = state
+                .s3_client
+                .as_ref()
+                .expect("s3_client set when storage_backend is S3");
             s3_storage::get_object(client, &state.config.s3_bucket, storage_path)
                 .await
                 .map_err(AppError::Internal)
@@ -61,7 +86,8 @@ async fn delete_bytes(state: &AppState, storage_path: &str) {
         }
         StorageBackend::S3 => {
             if let Some(client) = state.s3_client.as_ref() {
-                let _ = s3_storage::delete_object(client, &state.config.s3_bucket, storage_path).await;
+                let _ =
+                    s3_storage::delete_object(client, &state.config.s3_bucket, storage_path).await;
             }
         }
     }
@@ -123,7 +149,9 @@ pub async fn upload_identity_image(
     // inflates the file several times over instead of shrinking it --
     // quality 80 keeps visual fidelity close to the source while actually
     // achieving the compression the format is chosen for.
-    let webp_bytes = webp::Encoder::from_rgba(&rgba, width, height).encode(80.0).to_vec();
+    let webp_bytes = webp::Encoder::from_rgba(&rgba, width, height)
+        .encode(80.0)
+        .to_vec();
 
     let filename = format!("{}.webp", Uuid::new_v4());
     let storage_path = format!("{file_type}/{user_id}/{filename}");

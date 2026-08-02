@@ -65,18 +65,30 @@ pub async fn register(
     ])?;
     require_password_strength(&req.password)?;
 
-    if user_repo::find_by_username(&state, &req.username).await?.is_some() {
+    if user_repo::find_by_username(&state, &req.username)
+        .await?
+        .is_some()
+    {
         tracing::warn!(username = %req.username, "register rejected: username already taken");
         return Err(AppError::Conflict("Username is already taken".to_string()));
     }
-    if user_repo::find_by_email(&state, &req.email).await?.is_some() {
+    if user_repo::find_by_email(&state, &req.email)
+        .await?
+        .is_some()
+    {
         tracing::warn!(email = %req.email, "register rejected: email already registered");
-        return Err(AppError::Conflict("Email is already registered".to_string()));
+        return Err(AppError::Conflict(
+            "Email is already registered".to_string(),
+        ));
     }
 
-    let role = req.role.filter(|r| !r.is_empty()).unwrap_or_else(|| "member".to_string());
+    let role = req
+        .role
+        .filter(|r| !r.is_empty())
+        .unwrap_or_else(|| "member".to_string());
     let hashed = password::hash_password(&req.password)?;
-    let user = user_repo::insert_user(&state, &req.username, &req.email, &hashed, &req.name, &role).await?;
+    let user = user_repo::insert_user(&state, &req.username, &req.email, &hashed, &req.name, &role)
+        .await?;
 
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
@@ -93,13 +105,24 @@ pub async fn register_with_profile(
     ])?;
     require_password_strength(&req.password)?;
 
-    if user_repo::find_by_email(&state, &req.email).await?.is_some() {
-        return Err(AppError::Conflict("Email is already registered".to_string()));
+    if user_repo::find_by_email(&state, &req.email)
+        .await?
+        .is_some()
+    {
+        return Err(AppError::Conflict(
+            "Email is already registered".to_string(),
+        ));
     }
 
-    let username = req.email.split('@').next().unwrap_or(&req.email).to_string();
+    let username = req
+        .email
+        .split('@')
+        .next()
+        .unwrap_or(&req.email)
+        .to_string();
     let hashed = password::hash_password(&req.password)?;
-    let user = user_repo::insert_user(&state, &username, &req.email, &hashed, &req.name, "member").await?;
+    let user =
+        user_repo::insert_user(&state, &username, &req.email, &hashed, &req.name, "member").await?;
 
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
@@ -122,7 +145,9 @@ pub async fn change_password(
 
     if !password::verify_password(&req.current_password, &user.password_hash) {
         tracing::warn!(user_id = %auth.user_id, "change-password rejected: wrong current password");
-        return Err(AppError::BadRequest("Current password is incorrect".to_string()));
+        return Err(AppError::BadRequest(
+            "Current password is incorrect".to_string(),
+        ));
     }
 
     let hashed = password::hash_password(&req.new_password)?;

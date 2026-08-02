@@ -137,7 +137,10 @@ async fn change_password_requires_correct_current_password() {
         .http
         .put(app.url("/auth/change-password"))
         .bearer_auth(token)
-        .query(&[("currentPassword", "not-the-real-password"), ("newPassword", "DaveNewPass1")])
+        .query(&[
+            ("currentPassword", "not-the-real-password"),
+            ("newPassword", "DaveNewPass1"),
+        ])
         .send()
         .await
         .expect("change-password request");
@@ -149,7 +152,10 @@ async fn change_password_requires_correct_current_password() {
         .http
         .put(app.url("/auth/change-password"))
         .bearer_auth(token)
-        .query(&[("currentPassword", "DavePass1"), ("newPassword", "DaveNewPass1")])
+        .query(&[
+            ("currentPassword", "DavePass1"),
+            ("newPassword", "DaveNewPass1"),
+        ])
         .send()
         .await
         .expect("change-password request");
@@ -182,7 +188,12 @@ async fn change_password_requires_authentication() {
 #[tokio::test]
 async fn health_check_is_public_and_unrate_limited_by_credential_bucket() {
     let app = common::spawn().await;
-    let res = app.http.get(app.url("/health")).send().await.expect("health request");
+    let res = app
+        .http
+        .get(app.url("/health"))
+        .send()
+        .await
+        .expect("health request");
     assert_eq!(res.status(), 200);
 }
 

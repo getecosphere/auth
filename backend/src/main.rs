@@ -14,8 +14,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .json()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -33,7 +32,10 @@ async fn main() -> anyhow::Result<()> {
     // Fail fast if S3 is misconfigured -- an unreachable bucket should
     // stop startup, not surface as a mysterious 500 on the first upload.
     if config.storage_backend == StorageBackend::S3 {
-        let client = state.s3_client.as_ref().expect("s3_client set when storage_backend is S3");
+        let client = state
+            .s3_client
+            .as_ref()
+            .expect("s3_client set when storage_backend is S3");
         s3_storage::ensure_bucket(client, &config.s3_bucket).await?;
         tracing::info!(bucket = %config.s3_bucket, endpoint = %config.s3_endpoint, "using S3 storage backend");
     }
