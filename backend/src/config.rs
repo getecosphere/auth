@@ -174,7 +174,25 @@ impl AppConfig {
             brevo_api_key: env::var("BREVO_API_KEY").unwrap_or_default(),
             mail_from_email: env::var("MAIL_FROM_EMAIL").unwrap_or_default(),
             mail_from_name: env::var("MAIL_FROM_NAME").unwrap_or_else(|_| "Auth".to_string()),
-            auth_public_url: env::var("AUTH_PUBLIC_URL").unwrap_or_default(),
+            // Verification links belong to the public application, not the
+            // Auth API. Prefer an explicit URL; otherwise Eco's generated
+            // first CORS origin is the estate frontend in both dev and prod.
+            // AUTH_PUBLIC_URL remains a backwards-compatible final fallback.
+            auth_public_url: env::var("EMAIL_VERIFICATION_PUBLIC_URL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| {
+                    env::var("CORS_ALLOWED_ORIGINS").ok().and_then(|origins| {
+                        origins
+                            .split(',')
+                            .next()
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            .map(str::to_owned)
+                    })
+                })
+                .or_else(|| env::var("AUTH_PUBLIC_URL").ok())
+                .unwrap_or_default(),
         })
     }
 }

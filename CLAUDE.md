@@ -14,7 +14,9 @@ session, then send a verification link. The link expires after
   returns `{ emailVerified, verificationExpiresInSeconds }`.
 - `POST /api/auth/resend-verification` with the same bearer token sends a new
   link and invalidates the previous one.
-- `GET /api/auth/verify-email?token=<token>` consumes the link.
+- `GET /api/auth/verify-email?token=<token>` consumes the link. Emails point
+  to the frontend route `/auth/verify-email/?token=…`, which calls this API
+  and shows the result in the estate's normal application layout.
 
 Domains may allow private/local work before verification. Before a request can
 publish content, start a negotiation, send public chat, or otherwise connect
@@ -27,5 +29,8 @@ one user to another, its backend must require a valid bearer token and call
 Auth uses Brevo's transactional API. Its `backend/.env.example` declares all
 keys; `eco up` / `eco configure` copies missing keys into the generated `.env`
 without overwriting existing secrets. Set `BREVO_API_KEY`, `MAIL_FROM_EMAIL`,
-and `AUTH_PUBLIC_URL` in the Eco-managed runtime `.env`, never Git. Use a
+and, only when the frontend origin cannot be inferred from CORS,
+`EMAIL_VERIFICATION_PUBLIC_URL` in the Eco-managed runtime `.env`, never Git.
+By default Eco's first `CORS_ALLOWED_ORIGINS` value is used as the frontend
+origin. Use a
 verified sending domain with SPF/DKIM in Brevo.
