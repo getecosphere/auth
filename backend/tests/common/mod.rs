@@ -7,7 +7,7 @@
 //! functions concurrently in the same process and `std::env::set_var`
 //! would race across them.
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-use rwid_auth_service::{config::AppConfig, routes, state::AppState};
+use rwid_auth_service::{config::{AppConfig, StorageBackend}, routes, state::AppState};
 use serde::Serialize;
 use std::net::SocketAddr;
 use uuid::Uuid;
@@ -58,6 +58,15 @@ pub async fn spawn() -> TestApp {
         api_base_url: "http://placeholder/api".to_string(),
         cors_allowed_origins: vec!["http://localhost:3000".to_string()],
         storage_local_path: storage_path.to_string_lossy().to_string(),
+        storage_backend: StorageBackend::Local,
+        s3_endpoint: String::new(), s3_region: "us-east-1".to_string(), s3_bucket: String::new(),
+        s3_access_key: String::new(), s3_secret_key: String::new(),
+        rate_limit_general_burst: 120, rate_limit_general_replenish_secs: 1,
+        rate_limit_auth_burst: 100, rate_limit_auth_replenish_secs: 1,
+        email_verification_required: false,
+        email_verification_ttl_hours: 24,
+        brevo_api_key: String::new(), mail_from_email: String::new(),
+        mail_from_name: "Test".to_string(), auth_public_url: "http://placeholder/api".to_string(),
     };
 
     let state = AppState::new(db.clone(), config);
