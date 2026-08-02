@@ -64,6 +64,7 @@ pub async fn register(
         ("name", &req.name),
     ])?;
     require_password_strength(&req.password)?;
+    email_verification::ensure_delivery_configured(&state.config)?;
 
     if user_repo::find_by_username(&state, &req.username)
         .await?
@@ -90,7 +91,11 @@ pub async fn register(
     let user = user_repo::insert_user(&state, &req.username, &req.email, &hashed, &req.name, &role)
         .await?;
 
-    email_verification::send_for_user(&state, &user).await?;
+    if let Err(error) = email_verification::send_for_user(&state, &user).await {
+        let _ = email_verification::discard_for_user(&state, &user.id_string()).await;
+        let _ = user_repo::discard_unverified_new_user(&state, &user.id_string()).await;
+        return Err(error);
+    }
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
 }
@@ -105,6 +110,7 @@ pub async fn register_with_profile(
         ("name", &req.name),
     ])?;
     require_password_strength(&req.password)?;
+    email_verification::ensure_delivery_configured(&state.config)?;
 
     if user_repo::find_by_email(&state, &req.email)
         .await?
@@ -125,7 +131,11 @@ pub async fn register_with_profile(
     let user =
         user_repo::insert_user(&state, &username, &req.email, &hashed, &req.name, "member").await?;
 
-    email_verification::send_for_user(&state, &user).await?;
+    if let Err(error) = email_verification::send_for_user(&state, &user).await {
+        let _ = email_verification::discard_for_user(&state, &user.id_string()).await;
+        let _ = user_repo::discard_unverified_new_user(&state, &user.id_string()).await;
+        return Err(error);
+    }
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
 }

@@ -153,3 +153,14 @@ pub async fn soft_delete(state: &AppState, id: &str) -> Result<(), AppError> {
         .await?;
     Ok(())
 }
+
+/// Used only to roll back a newly-created, unverified account when its first
+/// verification email cannot be sent. Normal user deletion remains soft.
+pub async fn discard_unverified_new_user(state: &AppState, id: &str) -> Result<(), AppError> {
+    let oid = ObjectId::parse_str(id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
+    users(state)
+        .delete_one(doc! { "_id": oid, "emailVerifiedAt": null }, None)
+        .await?;
+    Ok(())
+}

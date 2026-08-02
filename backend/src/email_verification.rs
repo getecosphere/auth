@@ -3,6 +3,7 @@ use mongodb::Collection;
 use uuid::Uuid;
 
 use crate::{
+    config::AppConfig,
     error::{AppError, AppResult},
     models::{user::User, verification::EmailVerification},
     password,
@@ -13,13 +14,27 @@ fn verifications(state: &AppState) -> Collection<EmailVerification> {
     state.db.collection("email_verifications")
 }
 
+/// Fail before a user is created when this installation requires email
+/// verification but cannot deliver a verification link. This keeps a typo in
+/// local/prod mail configuration from leaving behind an unusable account.
+pub fn ensure_delivery_configured(config: &AppConfig) -> AppResult<()> {
+    if config.email_verification_required
+        && (config.brevo_api_key.is_empty()
+            || config.mail_from_email.is_empty()
+            || config.auth_public_url.is_empty())
+    {
+        return Err(AppError::BadRequest(
+            "Pendaftaran belum tersedia karena layanan verifikasi email belum dikonfigurasi.".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<()> {
     if !state.config.email_verification_required || user.email_verified_at.is_some() {
         return Ok(());
     }
-    if state.config.brevo_api_key.is_empty() || state.config.mail_from_email.is_empty() || state.config.auth_public_url.is_empty() {
-        return Err(AppError::Internal(anyhow::anyhow!("Email verification is enabled but Brevo is not configured")));
-    }
+    ensure_delivery_configured(&state.config)?;
     let secret = Uuid::new_v4().to_string();
     let record = EmailVerification {
         id: Uuid::new_v4().to_string(), user_id: user.id_string(),
@@ -42,6 +57,13 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<()> {
     if !response.status().is_success() {
         return Err(AppError::Internal(anyhow::anyhow!("Brevo rejected verification email: {}", response.status())));
     }
+    Ok(())
+}
+
+pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> {
+    verifications(state)
+        .delete_many(doc! { "userId": user_id }, None)
+        .await?;
     Ok(())
 }
 
