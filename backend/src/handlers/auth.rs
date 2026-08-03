@@ -7,11 +7,12 @@ use axum::{
 use crate::{
     auth_extractor::AuthUser,
     dto::{
-        AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse, EmailVerificationStatus,
-        LoginRequest, RegisterQuery, RegisterWithProfileQuery, UserDto,
+        AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse,
+        EmailVerificationStatus, LoginRequest, RegisterQuery, RegisterWithProfileQuery, UserDto,
     },
+    email_verification,
     error::{require_non_blank, require_password_strength, AppError, AppResult},
-    email_verification, jwt, password,
+    jwt, password,
     state::AppState,
     user_repo,
 };
@@ -153,16 +154,21 @@ pub async fn verify_email(
     State(state): State<AppState>,
     Query(query): Query<std::collections::HashMap<String, String>>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let token = query.get("token").ok_or_else(|| AppError::BadRequest("Verification token is required".into()))?;
+    let token = query
+        .get("token")
+        .ok_or_else(|| AppError::BadRequest("Verification token is required".into()))?;
     email_verification::verify(&state, token).await?;
-    Ok(Json(serde_json::json!({ "verified": true, "message": "Email berhasil diverifikasi. Kamu sekarang dapat menggunakan Marketplace dan negosiasi." })))
+    Ok(Json(
+        serde_json::json!({ "verified": true, "message": "Email berhasil diverifikasi. Kamu sekarang dapat menggunakan Marketplace dan negosiasi." }),
+    ))
 }
 
 pub async fn resend_verification(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
-    let user = user_repo::find_by_id(&state, &auth.user_id).await?
+    let user = user_repo::find_by_id(&state, &auth.user_id)
+        .await?
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
     let message_id = email_verification::send_for_user(&state, &user).await?;
     Ok((
@@ -198,7 +204,9 @@ pub async fn notify_marketplace_sale(
             &request.buyer_name,
             request.final_price,
             user.id_string() == request.buyer_id,
-        ).await {
+        )
+        .await
+        {
             Ok(_) => notified += 1,
             Err(_error) => {
                 skipped += 1;
@@ -206,16 +214,36 @@ pub async fn notify_marketplace_sale(
             }
         }
     }
-    Ok(Json(serde_json::json!({ "accepted": true, "notified": notified, "skipped": skipped })))
+    Ok(Json(
+        serde_json::json!({ "accepted": true, "notified": notified, "skipped": skipped }),
+    ))
 }
 
-pub async fn verification_status(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<EmailVerificationStatus>> {
-    let user = user_repo::find_by_id(&state, &auth.user_id).await?
+pub async fn verification_status(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> AppResult<Json<EmailVerificationStatus>> {
+    let user = user_repo::find_by_id(&state, &auth.user_id)
+        .await?
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
     Ok(Json(EmailVerificationStatus {
-        email_verified: !state.config.email_verification_required || user.email_verified_at.is_some(),
+        email_verified: !state.config.email_verification_required
+            || user.email_verified_at.is_some(),
         verification_expires_in_seconds: state.config.email_verification_ttl_hours * 3600,
     }))
+}
+
+/// Returns the authenticated identity for sibling domains.  This keeps JWT
+/// verification in Auth, instead of making every domain carry a copy of the
+/// signing secret just to learn who made a request.
+pub async fn session_identity(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> AppResult<Json<UserDto>> {
+    let user = user_repo::find_by_id(&state, &auth.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    Ok(Json(UserDto::from(&user)))
 }
 
 pub async fn change_password(

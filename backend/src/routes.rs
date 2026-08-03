@@ -79,8 +79,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/login", post(handlers::auth::login))
         .route("/auth/register", post(handlers::auth::register))
         .route("/auth/verify-email", get(handlers::auth::verify_email))
-        .route("/auth/resend-verification", post(handlers::auth::resend_verification))
-        .route("/auth/marketplace-sale-notifications", post(handlers::auth::notify_marketplace_sale))
+        .route(
+            "/auth/resend-verification",
+            post(handlers::auth::resend_verification),
+        )
+        .route(
+            "/auth/marketplace-sale-notifications",
+            post(handlers::auth::notify_marketplace_sale),
+        )
         .route(
             "/auth/register-with-profile",
             post(handlers::auth::register_with_profile),
@@ -99,7 +105,11 @@ pub fn build_router(state: AppState) -> Router {
         // This is polled by the shared frontend layout. It authenticates the
         // caller itself, but must not consume the small credential-stuffing
         // budget that protects login and registration.
-        .route("/auth/verification-status", get(handlers::auth::verification_status))
+        .route(
+            "/auth/verification-status",
+            get(handlers::auth::verification_status),
+        )
+        .route("/auth/session", get(handlers::auth::session_identity))
         .route(
             "/auth/users/check-existence",
             post(handlers::auth::check_existence),
@@ -155,11 +165,9 @@ fn rate_limit_error(error: GovernorError) -> Response {
             None,
             "Permintaan tidak dapat diproses. Coba lagi.",
         ),
-        GovernorError::Other { code, headers, .. } => (
-            code,
-            headers,
-            "Permintaan tidak dapat diproses. Coba lagi.",
-        ),
+        GovernorError::Other { code, headers, .. } => {
+            (code, headers, "Permintaan tidak dapat diproses. Coba lagi.")
+        }
     };
     let mut response = Response::new(Body::from(format!(r#"{{"error":"{message}"}}"#)));
     *response.status_mut() = status;
