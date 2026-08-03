@@ -23,6 +23,15 @@ use crate::{
 /// is enough to enumerate valid usernames.
 const DUMMY_PASSWORD_HASH: &str = "$2b$10$NgQ6Jvr432x5WAphKYFAHOiB/j8WX.ENwhOgv4lALaR1rszL4Xfbe";
 
+#[derive(serde::Deserialize)]
+pub struct MarketplaceSaleNotificationRequest {
+    pub recipient_ids: Vec<String>,
+    pub item_title: String,
+    pub buyer_id: String,
+    pub buyer_name: String,
+    pub final_price: f64,
+}
+
 pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
@@ -164,6 +173,40 @@ pub async fn resend_verification(
             "message": "Permintaan email verifikasi diterima oleh Brevo. Periksa inbox dan folder spam."
         })),
     ))
+}
+
+/// Marketplace owns the transactional state change; Auth owns the mail
+/// provider credentials and recipient identity. This endpoint intentionally
+/// returns accepted counts so a transient provider failure never undoes a
+/// completed transfer of ownership.
+pub async fn notify_marketplace_sale(
+    State(state): State<AppState>,
+    _seller: AuthUser,
+    Json(request): Json<MarketplaceSaleNotificationRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    let mut notified = 0usize;
+    let mut skipped = 0usize;
+    for user_id in request.recipient_ids {
+        let Some(user) = user_repo::find_by_id(&state, &user_id).await? else {
+            skipped += 1;
+            continue;
+        };
+        match email_verification::send_marketplace_sale_notice(
+            &state,
+            &user,
+            &request.item_title,
+            &request.buyer_name,
+            request.final_price,
+            user.id_string() == request.buyer_id,
+        ).await {
+            Ok(_) => notified += 1,
+            Err(_error) => {
+                skipped += 1;
+                tracing::warn!(user_id = %user.id_string(), "Marketplace sale email could not be sent");
+            }
+        }
+    }
+    Ok(Json(serde_json::json!({ "accepted": true, "notified": notified, "skipped": skipped })))
 }
 
 pub async fn verification_status(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<EmailVerificationStatus>> {

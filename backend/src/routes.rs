@@ -80,6 +80,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/register", post(handlers::auth::register))
         .route("/auth/verify-email", get(handlers::auth::verify_email))
         .route("/auth/resend-verification", post(handlers::auth::resend_verification))
+        .route("/auth/marketplace-sale-notifications", post(handlers::auth::notify_marketplace_sale))
         .route(
             "/auth/register-with-profile",
             post(handlers::auth::register_with_profile),
