@@ -9,12 +9,10 @@ async fn register_then_login_round_trip() {
     let register_res = app
         .http
         .post(app.url("/auth/register"))
-        .query(&[
-            ("username", "alice"),
-            ("email", "alice@example.com"),
-            ("password", "AlicePass1"),
-            ("name", "Alice"),
-        ])
+        .json(&json!({
+            "username": "alice", "email": "alice@example.com",
+            "password": "AlicePass1", "name": "Alice"
+        }))
         .send()
         .await
         .expect("register request");
@@ -42,12 +40,10 @@ async fn login_rejects_wrong_password_and_unknown_user_identically() {
 
     app.http
         .post(app.url("/auth/register"))
-        .query(&[
-            ("username", "bob"),
-            ("email", "bob@example.com"),
-            ("password", "BobPass123"),
-            ("name", "Bob"),
-        ])
+        .json(&json!({
+            "username": "bob", "email": "bob@example.com",
+            "password": "BobPass123", "name": "Bob"
+        }))
         .send()
         .await
         .expect("register request")
@@ -84,12 +80,10 @@ async fn register_rejects_duplicate_username_and_email_with_409() {
 
     app.http
         .post(app.url("/auth/register"))
-        .query(&[
-            ("username", "carol"),
-            ("email", "carol@example.com"),
-            ("password", "CarolPass1"),
-            ("name", "Carol"),
-        ])
+        .json(&json!({
+            "username": "carol", "email": "carol@example.com",
+            "password": "CarolPass1", "name": "Carol"
+        }))
         .send()
         .await
         .expect("register request")
@@ -99,12 +93,10 @@ async fn register_rejects_duplicate_username_and_email_with_409() {
     let dup_username = app
         .http
         .post(app.url("/auth/register"))
-        .query(&[
-            ("username", "carol"),
-            ("email", "different@example.com"),
-            ("password", "CarolPass2"),
-            ("name", "Carol Duplicate"),
-        ])
+        .json(&json!({
+            "username": "carol", "email": "different@example.com",
+            "password": "CarolPass2", "name": "Carol Duplicate"
+        }))
         .send()
         .await
         .expect("register request");
@@ -118,12 +110,10 @@ async fn change_password_requires_correct_current_password() {
     let register_body: Value = app
         .http
         .post(app.url("/auth/register"))
-        .query(&[
-            ("username", "dave"),
-            ("email", "dave@example.com"),
-            ("password", "DavePass1"),
-            ("name", "Dave"),
-        ])
+        .json(&json!({
+            "username": "dave", "email": "dave@example.com",
+            "password": "DavePass1", "name": "Dave"
+        }))
         .send()
         .await
         .expect("register request")

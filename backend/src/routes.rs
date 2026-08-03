@@ -1,14 +1,16 @@
 use std::{sync::Arc, time::Duration};
 
 use axum::{
-    http::HeaderValue,
+    body::Body,
+    http::{header::CONTENT_TYPE, HeaderValue, StatusCode},
     response::Response,
     routing::{delete, get, post, put},
     Router,
 };
 use tower::ServiceBuilder;
 use tower_governor::{
-    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorError,
+    GovernorLayer,
 };
 use tower_http::{
     cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer},
@@ -56,6 +58,7 @@ pub fn build_router(state: AppState) -> Router {
             .key_extractor(SmartIpKeyExtractor)
             .per_second(state.config.rate_limit_auth_replenish_secs)
             .burst_size(state.config.rate_limit_auth_burst)
+            .error_handler(rate_limit_error)
             .finish()
             .expect("valid governor config"),
     );
@@ -66,6 +69,7 @@ pub fn build_router(state: AppState) -> Router {
             .key_extractor(SmartIpKeyExtractor)
             .per_second(state.config.rate_limit_general_replenish_secs)
             .burst_size(state.config.rate_limit_general_burst)
+            .error_handler(rate_limit_error)
             .finish()
             .expect("valid governor config"),
     );
@@ -76,7 +80,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/register", post(handlers::auth::register))
         .route("/auth/verify-email", get(handlers::auth::verify_email))
         .route("/auth/resend-verification", post(handlers::auth::resend_verification))
-        .route("/auth/verification-status", get(handlers::auth::verification_status))
         .route(
             "/auth/register-with-profile",
             post(handlers::auth::register_with_profile),
@@ -92,6 +95,10 @@ pub fn build_router(state: AppState) -> Router {
 
     let general_routes = Router::new()
         .route("/health", get(handlers::health::health))
+        // This is polled by the shared frontend layout. It authenticates the
+        // caller itself, but must not consume the small credential-stuffing
+        // budget that protects login and registration.
+        .route("/auth/verification-status", get(handlers::auth::verification_status))
         .route(
             "/auth/users/check-existence",
             post(handlers::auth::check_existence),
@@ -130,6 +137,39 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api", api_routes)
         .layer(cors)
         .layer(axum::middleware::from_fn(crate::request_id::propagate))
+}
+
+/// `tower_governor` defaults to a plain-text 429. Browser clients use JSON
+/// for every Auth response, so keep throttling machine-readable and useful
+/// instead of surfacing a misleading "invalid response" message.
+fn rate_limit_error(error: GovernorError) -> Response {
+    let (status, headers, message) = match error {
+        GovernorError::TooManyRequests { headers, .. } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            headers,
+            "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.",
+        ),
+        GovernorError::UnableToExtractKey => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            "Permintaan tidak dapat diproses. Coba lagi.",
+        ),
+        GovernorError::Other { code, headers, .. } => (
+            code,
+            headers,
+            "Permintaan tidak dapat diproses. Coba lagi.",
+        ),
+    };
+    let mut response = Response::new(Body::from(format!(r#"{{"error":"{message}"}}"#)));
+    *response.status_mut() = status;
+    if let Some(headers) = headers {
+        response.headers_mut().extend(headers);
+    }
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    response
 }
 
 /// Restores the response headers Spring Security was adding by default in

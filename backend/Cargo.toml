@@ -34,4 +34,6 @@ opt-level = 3
 lto = true
 
 [dev-dependencies]
-reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls", "multipart", "query"] }
+# Keep the test client on the same reqwest release as the service.  Cargo
+# otherwise links two incompatible rlibs into the shared Stuff8 workspace.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
