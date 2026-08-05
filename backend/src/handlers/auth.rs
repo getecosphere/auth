@@ -31,6 +31,10 @@ pub struct MarketplaceSaleNotificationRequest {
     pub buyer_id: String,
     pub buyer_name: String,
     pub final_price: f64,
+    /// Id of the seller who completed the sale. Defaults to empty so older
+    /// marketplace callers (which never emailed the seller) keep working.
+    #[serde(default)]
+    pub seller_id: String,
 }
 
 pub async fn login(
@@ -204,6 +208,7 @@ pub async fn notify_marketplace_sale(
             &request.buyer_name,
             request.final_price,
             user.id_string() == request.buyer_id,
+            user.id_string() == request.seller_id,
         )
         .await
         {

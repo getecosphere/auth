@@ -98,6 +98,7 @@ pub async fn send_marketplace_sale_notice(
     buyer_name: &str,
     final_price: f64,
     is_buyer: bool,
+    is_seller: bool,
 ) -> AppResult<Option<String>> {
     if state.config.brevo_api_key.is_empty() || state.config.mail_from_email.is_empty() {
         tracing::warn!(user_id = %user.id_string(), "Marketplace sale email skipped: mail delivery is not configured");
@@ -111,6 +112,14 @@ pub async fn send_marketplace_sale_notice(
             format!(
                 "<p>Halo {},</p><p>Selamat! <strong>{}</strong> sudah terjual kepadamu seharga <strong>{}</strong>.</p><p>Barangnya sekarang sudah masuk ke Inventaris pribadi kamu di Stuff8. Semoga cocok, ya.</p>",
                 user.name, title, formatted_price
+            ),
+        )
+    } else if is_seller {
+        (
+            format!("Barangmu {} sudah terjual", title),
+            format!(
+                "<p>Halo {},</p><p>Barang <strong>{}</strong> kamu sudah terjual kepada {} seharga <strong>{}</strong>.</p><p>Terima kasih sudah bertransaksi di Stuff8!</p>",
+                user.name, title, buyer_name, formatted_price
             ),
         )
     } else {
@@ -141,9 +150,18 @@ pub async fn send_marketplace_sale_notice(
         tracing::error!(%status, response = %response_body, user_id = %user.id_string(), "Brevo rejected marketplace sale email");
         return Err(AppError::Internal(anyhow::anyhow!("Brevo rejected marketplace sale email: {status}")));
     }
-    Ok(serde_json::from_str::<serde_json::Value>(&response_body)
+    let message_id = serde_json::from_str::<serde_json::Value>(&response_body)
         .ok()
-        .and_then(|value| value.get("messageId").and_then(|id| id.as_str()).map(str::to_owned)) )
+        .and_then(|value| value.get("messageId").and_then(|id| id.as_str()).map(str::to_owned));
+    tracing::info!(
+        user_id = %user.id_string(),
+        email = %user.email,
+        is_buyer,
+        is_seller,
+        message_id = message_id.as_deref().unwrap_or("unavailable"),
+        "Brevo accepted marketplace sale email"
+    );
+    Ok(message_id)
 }
 
 pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> {
