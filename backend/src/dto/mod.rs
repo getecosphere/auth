@@ -19,6 +19,11 @@ pub struct UserDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_photo_url: Option<String>,
     pub role: String,
+    /// Access rights the user currently holds (e.g. `verified_user`). Auth
+    /// reports the rights; the rules that map them to capabilities live in the
+    /// composition domain.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -34,6 +39,7 @@ impl From<&User> for UserDto {
             avatar_url: user.avatar_url.clone(),
             cover_photo_url: user.cover_photo_url.clone(),
             role: user.role.clone(),
+            permissions: user.access_rights(),
             created_at: user.created_at.to_chrono(),
             updated_at: user.updated_at.to_chrono(),
         }

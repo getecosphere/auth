@@ -56,6 +56,7 @@ pub async fn insert_user(
         password_hash: password_hash.to_string(),
         name: name.to_string(),
         role: role.to_string(),
+        permissions: Vec::new(),
         email_verified_at: None,
         avatar_url: None,
         cover_photo_url: None,

@@ -109,6 +109,10 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/verification-status",
             get(handlers::auth::verification_status),
         )
+        .route(
+            "/auth/access-rights",
+            get(handlers::auth::access_rights),
+        )
         .route("/auth/session", get(handlers::auth::session_identity))
         .route(
             "/auth/users/check-existence",

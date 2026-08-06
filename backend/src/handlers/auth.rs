@@ -254,6 +254,25 @@ pub async fn session_identity(
     Ok(Json(UserDto::from(&user)))
 }
 
+/// Returns the access rights (permission tokens) the authenticated user
+/// currently holds, e.g. `["verified_user"]`. Auth is the settings owner —
+/// it reports the rights — but the rules that map rights to capabilities live
+/// in the composition domain, so this endpoint deliberately exposes raw
+/// tokens, not business capabilities.
+pub async fn access_rights(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> AppResult<Json<serde_json::Value>> {
+    let user = user_repo::find_by_id(&state, &auth.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    Ok(Json(serde_json::json!({
+        "userId": user.id_string(),
+        "emailVerified": user.email_verified_at.is_some(),
+        "permissions": user.access_rights(),
+    })))
+}
+
 pub async fn change_password(
     State(state): State<AppState>,
     auth: AuthUser,
