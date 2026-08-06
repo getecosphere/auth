@@ -84,8 +84,8 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::auth::resend_verification),
         )
         .route(
-            "/auth/marketplace-sale-notifications",
-            post(handlers::auth::notify_marketplace_sale),
+            "/auth/mail",
+            post(handlers::auth::send_mail),
         )
         .route(
             "/auth/register-with-profile",

@@ -24,6 +24,22 @@ one user to another, its backend must require a valid bearer token and call
 `GET /auth/verification-status` at Auth. Do not trust a browser-provided
 `emailVerified` flag.
 
+## Transactional mail contract
+
+`POST /api/auth/mail` (requires a valid bearer token) delivers fully-rendered
+transactional emails on behalf of other domains:
+
+```json
+{ "messages": [ { "recipient_id": "<user id>", "subject": "…", "html": "…" } ] }
+```
+
+This contract is deliberately **content-agnostic**. Auth owns the recipient
+identity (user id → email lookup) and the mail provider credentials
+(`BREVO_API_KEY`, `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME`); the caller owns the
+message subject/html and its templates. Auth must never contain another
+domain's business data or email templates, and no domain should couple to
+Auth's Brevo/`MAIL_FROM_*` implementation details — use this endpoint instead.
+
 ## Environment and Eco
 
 Auth uses Brevo's transactional API. Its `backend/.env.example` declares all

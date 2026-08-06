@@ -61,11 +61,6 @@ pub struct AppConfig {
     pub mail_from_email: String,
     pub mail_from_name: String,
     pub auth_public_url: String,
-    /// Public site root (e.g. https://stuff8.com) used to build links inside
-    /// transactional emails (product images, inventory/marketplace pages).
-    /// Falls back to the first CORS_ALLOWED_ORIGINS origin, which is the
-    /// estate frontend in both dev and prod.
-    pub public_site_url: String,
 }
 
 impl AppConfig {
@@ -197,20 +192,6 @@ impl AppConfig {
                     })
                 })
                 .or_else(|| env::var("AUTH_PUBLIC_URL").ok())
-                .unwrap_or_default(),
-            public_site_url: env::var("PUBLIC_SITE_URL")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .or_else(|| {
-                    env::var("CORS_ALLOWED_ORIGINS").ok().and_then(|origins| {
-                        origins
-                            .split(',')
-                            .next()
-                            .map(str::trim)
-                            .filter(|value| !value.is_empty())
-                            .map(str::to_owned)
-                    })
-                })
                 .unwrap_or_default(),
         })
     }

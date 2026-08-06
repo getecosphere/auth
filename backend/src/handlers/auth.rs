@@ -24,32 +24,20 @@ use crate::{
 /// is enough to enumerate valid usernames.
 const DUMMY_PASSWORD_HASH: &str = "$2b$10$NgQ6Jvr432x5WAphKYFAHOiB/j8WX.ENwhOgv4lALaR1rszL4Xfbe";
 
+/// One recipient of a generic transactional email. Auth resolves the
+/// recipient id to an email (recipient identity is Auth's bounded context)
+/// and owns the mail provider credentials, but the subject/html are opaque —
+/// the calling domain (e.g. marketplace) owns its message content.
 #[derive(serde::Deserialize)]
-pub struct MarketplaceSaleNotificationRequest {
-    pub recipient_ids: Vec<String>,
-    pub item_title: String,
-    /// Product details used by the sale email template (image, description,
-    /// category, condition, asking price). Defaults keep older marketplace
-    /// callers that only sent the title working.
-    #[serde(default)]
-    pub item_id: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub category: String,
-    #[serde(default)]
-    pub condition: String,
-    #[serde(default)]
-    pub photos: Vec<String>,
-    #[serde(default)]
-    pub asking_price: f64,
-    pub buyer_id: String,
-    pub buyer_name: String,
-    pub final_price: f64,
-    /// Id of the seller who completed the sale. Defaults to empty so older
-    /// marketplace callers (which never emailed the seller) keep working.
-    #[serde(default)]
-    pub seller_id: String,
+pub struct MailMessage {
+    pub recipient_id: String,
+    pub subject: String,
+    pub html: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct MailBatchRequest {
+    pub messages: Vec<MailMessage>,
 }
 
 pub async fn login(
@@ -200,50 +188,42 @@ pub async fn resend_verification(
     ))
 }
 
-/// Marketplace owns the transactional state change; Auth owns the mail
-/// provider credentials and recipient identity. This endpoint intentionally
-/// returns accepted counts so a transient provider failure never undoes a
-/// completed transfer of ownership.
-pub async fn notify_marketplace_sale(
+/// Generic transactional mail delivery. Auth owns the mail provider
+/// credentials and recipient identity (user id -> email); the caller owns the
+/// message content. This is deliberately content-agnostic so no domain's
+/// business data or templates ever leak into Auth — marketplace renders its
+/// own sale emails and sends them through this contract. Returns accepted
+/// counts so a transient provider failure never undoes the caller's own
+/// transactional state change.
+pub async fn send_mail(
     State(state): State<AppState>,
-    _seller: AuthUser,
-    Json(request): Json<MarketplaceSaleNotificationRequest>,
+    _sender: AuthUser,
+    Json(request): Json<MailBatchRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let mut notified = 0usize;
+    let mut accepted = 0usize;
     let mut skipped = 0usize;
-    for user_id in request.recipient_ids {
-        let Some(user) = user_repo::find_by_id(&state, &user_id).await? else {
+    for message in request.messages {
+        let Some(user) = user_repo::find_by_id(&state, &message.recipient_id).await? else {
             skipped += 1;
             continue;
         };
-        match email_verification::send_marketplace_sale_notice(
+        match email_verification::send_transactional_mail(
             &state,
             &user,
-            &email_verification::MarketplaceSaleEmailItem {
-                id: request.item_id.clone(),
-                title: request.item_title.clone(),
-                description: request.description.clone(),
-                category: request.category.clone(),
-                condition: request.condition.clone(),
-                photos: request.photos.clone(),
-                asking_price: request.asking_price,
-            },
-            &request.buyer_name,
-            request.final_price,
-            user.id_string() == request.buyer_id,
-            user.id_string() == request.seller_id,
+            &message.subject,
+            &message.html,
         )
         .await
         {
-            Ok(_) => notified += 1,
+            Ok(_) => accepted += 1,
             Err(_error) => {
                 skipped += 1;
-                tracing::warn!(user_id = %user.id_string(), "Marketplace sale email could not be sent");
+                tracing::warn!(user_id = %user.id_string(), "Transactional email could not be sent");
             }
         }
     }
     Ok(Json(
-        serde_json::json!({ "accepted": true, "notified": notified, "skipped": skipped }),
+        serde_json::json!({ "accepted": accepted, "skipped": skipped }),
     ))
 }
 
