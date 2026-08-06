@@ -28,6 +28,21 @@ const DUMMY_PASSWORD_HASH: &str = "$2b$10$NgQ6Jvr432x5WAphKYFAHOiB/j8WX.ENwhOgv4
 pub struct MarketplaceSaleNotificationRequest {
     pub recipient_ids: Vec<String>,
     pub item_title: String,
+    /// Product details used by the sale email template (image, description,
+    /// category, condition, asking price). Defaults keep older marketplace
+    /// callers that only sent the title working.
+    #[serde(default)]
+    pub item_id: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub condition: String,
+    #[serde(default)]
+    pub photos: Vec<String>,
+    #[serde(default)]
+    pub asking_price: f64,
     pub buyer_id: String,
     pub buyer_name: String,
     pub final_price: f64,
@@ -204,7 +219,15 @@ pub async fn notify_marketplace_sale(
         match email_verification::send_marketplace_sale_notice(
             &state,
             &user,
-            &request.item_title,
+            &email_verification::MarketplaceSaleEmailItem {
+                id: request.item_id.clone(),
+                title: request.item_title.clone(),
+                description: request.description.clone(),
+                category: request.category.clone(),
+                condition: request.condition.clone(),
+                photos: request.photos.clone(),
+                asking_price: request.asking_price,
+            },
             &request.buyer_name,
             request.final_price,
             user.id_string() == request.buyer_id,
