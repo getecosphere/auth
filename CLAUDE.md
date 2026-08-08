@@ -40,6 +40,28 @@ message subject/html and its templates. Auth must never contain another
 domain's business data or email templates, and no domain should couple to
 Auth's Brevo/`MAIL_FROM_*` implementation details — use this endpoint instead.
 
+## JWT token lifetime
+
+Auth issues HS512-signed JWTs on login/register. The token is used by every
+other domain for service-to-service and browser-to-service authentication.
+
+- **Expiry**: controlled by `JWT_EXPIRATION` env var (milliseconds), default
+  `2_592_000_000` (30 days). The login/register response includes `expires_in`
+  (seconds) so the frontend can proactively invalidate the session.
+- **Secret**: `JWT_SECRET` must be identical across every service in the estate
+  that validates tokens (auth, chat, notifications, profile, photos, inventory,
+  marketplace, bidding). Eco's `configure.sh` copies the same secret into
+  every `.env`.
+- **Rotation**: to rotate the secret, update `JWT_SECRET` in every service's
+  `.env` and restart all services. Existing tokens become invalid immediately
+  — there is no grace period.
+- **Frontend behaviour**: the composition frontend stores `expires_at` derived
+  from `expires_in`. Before opening/reconnecting any WebSocket (chat,
+  notifications) or making authenticated requests, it checks `isSessionValid()`.
+  An expired session clears localStorage and redirects to `/auth/signin/`.
+  This prevents infinite 401-retry loops that previously left WebSockets
+  silently dead.
+
 ## Environment and Eco
 
 Auth uses Brevo's transactional API. Its `backend/.env.example` declares all
