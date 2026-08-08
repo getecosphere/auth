@@ -132,7 +132,7 @@ impl AppConfig {
             jwt_expiration_ms: env::var("JWT_EXPIRATION")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(86_400_000),
+                .unwrap_or(2_592_000_000),
             server_port,
             api_base_url: env::var("API_BASE_URL")
                 .unwrap_or_else(|_| format!("http://localhost:{server_port}/api")),
