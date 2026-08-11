@@ -95,6 +95,10 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/change-password",
             put(handlers::auth::change_password),
         )
+        .route(
+            "/auth/verify-password",
+            post(handlers::auth::verify_password),
+        )
         .route("/auth/me", put(handlers::auth::update_identity))
         .layer(GovernorLayer {
             config: auth_governor_config,

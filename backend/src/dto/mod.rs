@@ -99,6 +99,17 @@ pub struct ChangePasswordQuery {
     pub new_password: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyPasswordRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VerifyPasswordResponse {
+    pub valid: bool,
+}
+
 /// Identity fields belong to Auth. The authenticated subject is the only
 /// target; callers never supply an arbitrary user id.
 #[derive(Debug, Deserialize)]
