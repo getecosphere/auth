@@ -91,3 +91,4 @@ jacoco/
 # JVM crash logs
 hs_err_pid*
 replay_pid*
+.lxs-artifacts.json
