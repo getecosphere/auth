@@ -9,6 +9,7 @@ use crate::{
     dto::{
         AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse,
         EmailVerificationStatus, LoginRequest, RegisterQuery, RegisterWithProfileQuery, UserDto,
+        VerifyPasswordRequest, VerifyPasswordResponse,
     },
     email_verification,
     error::{require_non_blank, require_password_strength, AppError, AppResult},
@@ -298,6 +299,21 @@ pub async fn change_password(
     let hashed = password::hash_password(&req.new_password)?;
     user_repo::update_password(&state, &auth.user_id, &hashed).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Verifies the authenticated user's password without changing anything.
+/// Used for sensitive confirmations (e.g. deleting a member account).
+pub async fn verify_password(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(req): Json<VerifyPasswordRequest>,
+) -> AppResult<Json<VerifyPasswordResponse>> {
+    let user = user_repo::find_by_id(&state, &auth.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("User not found: {}", auth.user_id)))?;
+
+    let valid = password::verify_password(&req.password, &user.password_hash);
+    Ok(Json(VerifyPasswordResponse { valid }))
 }
 
 pub async fn update_identity(
