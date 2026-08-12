@@ -1,0 +1,57 @@
+name: auth
+domain: auth
+version: 1.0.0
+publisher: stuff8
+status: unverified
+license: mit
+summary: "Authentication: login, register, JWT, email verification, avatars"
+
+targets:
+  - linux/amd64
+
+artifacts: {}
+
+contract:
+  version: 1
+  api: "auth REST API"
+  env:
+    required:
+      - JWT_SECRET
+      - MONGODB_URI
+      - SERVER_PORT
+    optional:
+      - JWT_EXPIRATION
+      - API_BASE_URL
+      - CORS_ALLOWED_ORIGINS
+      - STORAGE_BACKEND
+      - RATE_LIMIT_GENERAL_BURST
+      - RATE_LIMIT_GENERAL_REPLENISH_SECS
+      - RATE_LIMIT_AUTH_BURST
+      - RATE_LIMIT_AUTH_REPLENISH_SECS
+      - EMAIL_VERIFICATION_REQUIRED
+      - EMAIL_VERIFICATION_TTL_HOURS
+      - BREVO_API_KEY
+      - MAIL_FROM_EMAIL
+      - MAIL_FROM_NAME
+  db: mongodb@7
+  network:
+    inbound: [http]
+    outbound: [https]
+  resources:
+    memory: "128m"
+    disk: "256m"
+    startup_seconds: 5
+
+runtime:
+  base: self-contained-static
+  libc: musl
+  dependencies: []
+
+provenance:
+  source: ""
+  commit: ""
+  built_by: ""
+  built_at: ""
+  target: x86_64-unknown-linux-musl
+
+release: []
