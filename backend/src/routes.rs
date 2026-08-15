@@ -127,6 +127,10 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/users/username/:username",
             get(handlers::auth::get_user_identity_by_username),
         )
+        .route(
+            "/auth/users/email/:email",
+            get(handlers::auth::get_user_identity_by_email),
+        )
         .route("/users/:id", delete(handlers::users::deactivate_user))
         .route("/users/:id/avatar", post(handlers::users::upload_avatar))
         .route(

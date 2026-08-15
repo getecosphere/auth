@@ -372,6 +372,20 @@ pub async fn get_user_identity_by_username(
     Ok(Json(UserDto::from(&user)))
 }
 
+/// Same as `get_user_identity` but keyed by email, for the chat domain to
+/// resolve invite-by-email to a user id without exposing any password data.
+/// Auth owns the email → user mapping, so other domains never re-implement it.
+pub async fn get_user_identity_by_email(
+    State(state): State<AppState>,
+    Path(email): Path<String>,
+) -> AppResult<Json<UserDto>> {
+    let email = email.trim().to_lowercase();
+    let user = user_repo::find_by_email(&state, &email)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("User not found: {email}")))?;
+    Ok(Json(UserDto::from(&user)))
+}
+
 fn issue_auth_response(
     state: &AppState,
     user: &crate::models::user::User,
