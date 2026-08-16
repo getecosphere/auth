@@ -19,10 +19,6 @@ use tower_http::{
 
 use crate::{handlers, state::AppState};
 
-/// Multipart avatar/cover uploads decode+re-encode a whole image in memory;
-/// this is generous for a profile photo but bounds worst-case allocation
-/// from the raw upload size (the decompression-bomb guard in storage.rs
-/// bounds the *decoded* size separately).
 const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 
 pub fn build_router(state: AppState) -> Router {
@@ -132,16 +128,6 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::auth::get_user_identity_by_email),
         )
         .route("/users/:id", delete(handlers::users::deactivate_user))
-        .route("/users/:id/avatar", post(handlers::users::upload_avatar))
-        .route(
-            "/users/:id/upload-cover-photo",
-            post(handlers::users::upload_cover_photo),
-        )
-        .route(
-            "/files/:id",
-            get(handlers::files::download_file).delete(handlers::files::delete_file),
-        )
-        .route("/files/view/:id", get(handlers::files::view_file))
         .layer(GovernorLayer {
             config: general_governor_config,
         });

@@ -14,10 +14,6 @@ pub struct UserDto {
     pub username: String,
     pub email: String,
     pub email_verified: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avatar_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cover_photo_url: Option<String>,
     pub role: String,
     /// Access rights the user currently holds (e.g. `verified_user`). Auth
     /// reports the rights; the rules that map them to capabilities live in the
@@ -36,8 +32,6 @@ impl From<&User> for UserDto {
             username: user.username.clone(),
             email: user.email.clone(),
             email_verified: user.email_verified_at.is_some(),
-            avatar_url: user.avatar_url.clone(),
-            cover_photo_url: user.cover_photo_url.clone(),
             role: user.role.clone(),
             permissions: user.access_rights(),
             created_at: user.created_at.to_chrono(),

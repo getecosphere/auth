@@ -58,8 +58,6 @@ pub async fn insert_user(
         role: role.to_string(),
         permissions: Vec::new(),
         email_verified_at: None,
-        avatar_url: None,
-        cover_photo_url: None,
         created_at: now,
         updated_at: now,
         deleted_at: None,
@@ -110,32 +108,6 @@ pub async fn update_name(state: &AppState, id: &str, name: &str) -> Result<(), A
         .update_one(
             doc! { "_id": oid, "deletedAt": null },
             doc! { "$set": { "name": name, "updatedAt": bson::DateTime::now() } },
-            None,
-        )
-        .await?;
-    Ok(())
-}
-
-pub async fn update_avatar_url(state: &AppState, id: &str, url: &str) -> Result<(), AppError> {
-    let oid = ObjectId::parse_str(id)
-        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
-    users(state)
-        .update_one(
-            doc! { "_id": oid },
-            doc! { "$set": { "avatarUrl": url, "updatedAt": bson::DateTime::now() } },
-            None,
-        )
-        .await?;
-    Ok(())
-}
-
-pub async fn update_cover_photo_url(state: &AppState, id: &str, url: &str) -> Result<(), AppError> {
-    let oid = ObjectId::parse_str(id)
-        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
-    users(state)
-        .update_one(
-            doc! { "_id": oid },
-            doc! { "$set": { "coverPhotoUrl": url, "updatedAt": bson::DateTime::now() } },
             None,
         )
         .await?;

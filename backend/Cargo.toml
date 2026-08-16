@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs"] }
-axum = { version = "0.7", features = ["multipart"] }
+axum = "0.7"
 tower-http = { version = "0.5", features = ["cors", "trace", "limit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -21,17 +21,15 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 thiserror = "1"
 anyhow = "1"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 tower_governor = "0.4.2"
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
 governor = "0.6"
-aws-sdk-s3 = "1"
-webp = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [profile.release]
 opt-level = 3
 lto = true
+strip = true
 
 [dev-dependencies]
 # Keep the test client on the same reqwest release as the service.  Cargo

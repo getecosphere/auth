@@ -16,15 +16,6 @@ const KNOWN_PLACEHOLDER_SECRETS: &[&str] = &[
 const MIN_JWT_SECRET_BYTES: usize = 32;
 const RECOMMENDED_JWT_SECRET_BYTES: usize = 64;
 
-/// Which backend storage.rs actually writes/reads uploaded files to/from.
-/// Defaults to Local so an estate that hasn't set up MinIO isn't broken by
-/// upgrading -- a domain opts into S3 explicitly via STORAGE_BACKEND=s3.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum StorageBackend {
-    Local,
-    S3,
-}
-
 #[derive(Clone)]
 pub struct AppConfig {
     pub mongodb_uri: String,
@@ -33,17 +24,6 @@ pub struct AppConfig {
     pub server_port: u16,
     pub api_base_url: String,
     pub cors_allowed_origins: Vec<String>,
-    pub storage_local_path: String,
-    pub storage_backend: StorageBackend,
-    /// Only meaningful when storage_backend is S3. `eco install minio`
-    /// prints these; configure.sh's resolve_minio_s3_config fills them into
-    /// .env from ecompose.yml's storage.minio block + MINIO_ACCESS_KEY/
-    /// MINIO_SECRET_KEY env vars.
-    pub s3_endpoint: String,
-    pub s3_region: String,
-    pub s3_bucket: String,
-    pub s3_access_key: String,
-    pub s3_secret_key: String,
     /// Everyday rate limit shared across all non-credential routes, per
     /// source IP. Tunable via env instead of a recompile -- dev traffic
     /// (page-load fan-out across peer services, hot reload) legitimately
@@ -99,32 +79,6 @@ impl AppConfig {
             );
         }
 
-        let storage_backend = match env::var("STORAGE_BACKEND")
-            .unwrap_or_else(|_| "local".to_string())
-            .to_lowercase()
-            .as_str()
-        {
-            "s3" | "minio" => StorageBackend::S3,
-            _ => StorageBackend::Local,
-        };
-        let s3_endpoint = env::var("S3_ENDPOINT").unwrap_or_default();
-        let s3_region = env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
-        let s3_bucket = env::var("S3_BUCKET").unwrap_or_default();
-        let s3_access_key = env::var("S3_ACCESS_KEY").unwrap_or_default();
-        let s3_secret_key = env::var("S3_SECRET_KEY").unwrap_or_default();
-        if storage_backend == StorageBackend::S3
-            && (s3_endpoint.is_empty()
-                || s3_bucket.is_empty()
-                || s3_access_key.is_empty()
-                || s3_secret_key.is_empty())
-        {
-            anyhow::bail!(
-                "STORAGE_BACKEND=s3 but S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY/S3_SECRET_KEY \
-                 are not all set. Run `eco install minio` and paste its endpoint into \
-                 ecompose.yml's storage.minio block, or set STORAGE_BACKEND=local."
-            );
-        }
-
         Ok(Self {
             mongodb_uri: env::var("MONGODB_URI")
                 .unwrap_or_else(|_| "mongodb://localhost:27017/rwid_community".to_string()),
@@ -142,14 +96,6 @@ impl AppConfig {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect(),
-            storage_local_path: env::var("STORAGE_LOCAL_PATH")
-                .unwrap_or_else(|_| "./storage".to_string()),
-            storage_backend,
-            s3_endpoint,
-            s3_region,
-            s3_bucket,
-            s3_access_key,
-            s3_secret_key,
             rate_limit_general_burst: env::var("RATE_LIMIT_GENERAL_BURST")
                 .ok()
                 .and_then(|v| v.parse().ok())

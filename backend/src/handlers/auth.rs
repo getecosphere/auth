@@ -346,9 +346,9 @@ pub async fn check_existence(
     Ok(Json(CheckUsernameResponse { existing }))
 }
 
-/// Internal identity lookup used by lms-backend to hydrate a profile row the
-/// first time it meets a userId, and to compose avatarUrl/coverPhotoUrl live
-/// on every profile read (auth is the only writer of those two fields).
+/// Internal identity lookup used by peer domains to hydrate a profile row the
+/// first time they meet a userId, and to refresh identity fields live on every
+/// profile read (auth is the only writer of these credential fields).
 pub async fn get_user_identity(
     State(state): State<AppState>,
     Path(id): Path<String>,

@@ -14,9 +14,7 @@ pub mod models;
 pub mod password;
 pub mod request_id;
 pub mod routes;
-pub mod s3_storage;
 pub mod state;
-pub mod storage;
 pub mod user_repo;
 
 pub async fn bootstrap() -> anyhow::Result<axum::Router> {
@@ -26,10 +24,5 @@ pub async fn bootstrap() -> anyhow::Result<axum::Router> {
     let db = client.default_database()
         .ok_or_else(|| anyhow::anyhow!("MONGODB_URI must include a database name"))?;
     let state = state::AppState::new(db, config.clone());
-    if config.storage_backend == config::StorageBackend::S3 {
-        if let Some(s3) = state.s3_client.as_ref() {
-            s3_storage::ensure_bucket(s3, &config.s3_bucket).await?;
-        }
-    }
     Ok(routes::build_router(state))
 }

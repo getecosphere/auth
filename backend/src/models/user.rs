@@ -30,10 +30,6 @@ pub struct User {
     pub permissions: Vec<String>,
     #[serde(rename = "emailVerifiedAt", skip_serializing_if = "Option::is_none")]
     pub email_verified_at: Option<bson::DateTime>,
-    #[serde(rename = "avatarUrl", skip_serializing_if = "Option::is_none")]
-    pub avatar_url: Option<String>,
-    #[serde(rename = "coverPhotoUrl", skip_serializing_if = "Option::is_none")]
-    pub cover_photo_url: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: bson::DateTime,
     #[serde(rename = "updatedAt")]

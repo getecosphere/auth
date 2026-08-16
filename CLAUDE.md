@@ -1,8 +1,13 @@
 # auth
 
 Reusable identity and credential domain. It owns accounts, passwords, JWTs,
-email ownership verification, and profile-photo identity fields. Other domains
-must never copy password or verification data.
+email ownership verification, and the identity fields `username`/`email`/
+`name`/`role`. Other domains must never copy password or verification data.
+
+Avatar/cover uploads and file storage are **not** auth's job — they belong to
+the `profile` domain (which uploads to the `storage` LXS). Auth stores and
+returns only credential identity; it has no storage, no S3, no image
+processing, no `/files` endpoints.
 
 ## Email verification contract
 
