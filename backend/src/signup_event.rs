@@ -12,9 +12,14 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::{config::AppConfig, models::user::User};
+use crate::{config::AppConfig, jwt, models::user::User};
 
 const EMIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The identity used when auth mints its own sink token (no
+/// `SIGNUP_EVENT_TOKEN` configured). A synthetic `sub` so the sink's
+/// per-user channels are never confused with a real account.
+const SERVICE_SUB: &str = "system.signup-bridge";
 
 #[derive(Serialize)]
 #[allow(non_snake_case)]
@@ -33,7 +38,17 @@ pub fn emit(config: AppConfig, user: &User) {
     let Some(url) = config.signup_event_url.clone() else {
         return;
     };
-    let token = config.signup_event_token.clone();
+    // Preferred: the composer-supplied token. Fallback: a short-lived JWT auth
+    // mints itself from the estate-shared JWT_SECRET, so any sink that
+    // validates estate tokens (like the notifications LXS) accepts the event.
+    let token = config
+        .signup_event_token
+        .clone()
+        .filter(|t| !t.is_empty())
+        .or_else(|| {
+            jwt::generate_token(&config.jwt_secret, SERVICE_SUB, "system", "service", 60_000)
+                .ok()
+        });
     let user_id = user.id_string();
     let username = user.username.clone();
     let email = user.email.clone();
