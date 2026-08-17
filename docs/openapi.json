@@ -1,0 +1,735 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "auth",
+    "version": "1.0.2",
+    "description": "Reusable identity and credential domain: accounts, passwords, JWTs, email ownership verification, profile identity fields, and transactional email delivery. Distributed as a binary only; see docs/api.md for the human-readable reference."
+  },
+  "servers": [
+    { "url": "/api" }
+  ],
+  "security": [
+    { "bearerAuth": [] }
+  ],
+  "tags": [
+    { "name": "auth" },
+    { "name": "users" },
+    { "name": "files" },
+    { "name": "health" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Liveness probe",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "enum": ["UP"] } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Sign in by username or email",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "description": "Username or email address" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthResponse" },
+          "400": { "$ref": "#/components/responses/InvalidArgument" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Create an account and issue a session JWT, then send a verification link",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "email", "password", "name"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "minLength": 8 },
+                  "name": { "type": "string" },
+                  "role": { "type": "string", "default": "member" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/AuthResponse" },
+          "400": { "$ref": "#/components/responses/ValidationOrInvalidArgument" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/register-with-profile": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Register from email only; username derived from the email local-part",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "name"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "minLength": 8 },
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/AuthResponse" },
+          "400": { "$ref": "#/components/responses/ValidationOrInvalidArgument" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/verify-email": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Consume a one-time email verification link",
+        "security": [],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Format <recordId>.<secret>"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "verified": { "type": "boolean", "enum": [true] },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidArgument" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/resend-verification": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Send a new verification link for the authenticated user",
+        "responses": {
+          "202": {
+            "description": "Accepted by Brevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": { "type": "boolean", "enum": [true] },
+                    "messageId": { "type": "string", "nullable": true },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/mail": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Deliver fully-rendered transactional emails on behalf of other domains",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["messages"],
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["recipient_id", "subject", "html"],
+                      "properties": {
+                        "recipient_id": { "type": "string", "description": "Auth user id (resolved to email)" },
+                        "subject": { "type": "string" },
+                        "html": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-message delivery counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": { "type": "integer" },
+                    "skipped": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/change-password": {
+      "put": {
+        "tags": ["auth"],
+        "summary": "Change the authenticated user's password (query params, not a JSON body)",
+        "parameters": [
+          { "name": "currentPassword", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "newPassword", "in": "query", "required": true, "schema": { "type": "string", "minLength": 8 } }
+        ],
+        "responses": {
+          "204": { "description": "Password updated" },
+          "400": { "$ref": "#/components/responses/ValidationOrInvalidArgument" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/verify-password": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Verify the authenticated user's password for sensitive-action confirmations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["password"],
+                "properties": { "password": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validity of the password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "valid": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/me": {
+      "put": {
+        "tags": ["auth"],
+        "summary": "Update the authenticated user's name",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated identity",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Validation" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/verification-status": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Email-verification state for the authenticated user (always true when verification is not required)",
+        "responses": {
+          "200": {
+            "description": "Verification state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "emailVerified": { "type": "boolean" },
+                    "verificationExpiresInSeconds": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/auth/access-rights": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Access-right tokens (permissions) held by the authenticated user",
+        "responses": {
+          "200": {
+            "description": "Permission tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": { "type": "string" },
+                    "emailVerified": { "type": "boolean" },
+                    "permissions": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Authenticated identity for sibling domains",
+        "responses": {
+          "200": {
+            "description": "The authenticated user",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/auth/users/check-existence": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Return which usernames already exist",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["usernames"],
+                "properties": {
+                  "usernames": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing usernames",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "existing": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Validation" }
+        }
+      }
+    },
+    "/auth/users/{id}": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Public identity lookup by user id",
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "User identity",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/auth/users/username/{username}": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Public identity lookup by username",
+        "security": [],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "User identity",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/UserDto" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/users/{id}": {
+      "delete": {
+        "tags": ["users"],
+        "summary": "Soft-deactivate a user account (OWNER role only)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "204": { "description": "Account deactivated" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/users/{id}/avatar": {
+      "post": {
+        "tags": ["users"],
+        "summary": "Upload a profile photo (OWNER/MENTOR/MEMBER roles only)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "image/*, re-encoded to lossy WebP" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded avatar URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "avatarUrl": { "type": "string" } }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidArgument" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" }
+        }
+      }
+    },
+    "/users/{id}/upload-cover-photo": {
+      "post": {
+        "tags": ["users"],
+        "summary": "Upload a cover photo (OWNER/MENTOR/MEMBER roles only)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "image/*, re-encoded to lossy WebP" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded cover photo URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "coverPhotoUrl": { "type": "string" } }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidArgument" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" }
+        }
+      }
+    },
+    "/files/{id}": {
+      "get": {
+        "tags": ["files"],
+        "summary": "Download a stored file's bytes (non-images get Content-Disposition: attachment)",
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes",
+            "content": {
+              "image/*": { "schema": { "type": "string", "format": "binary" } },
+              "application/octet-stream": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["files"],
+        "summary": "Delete a stored file (OWNER/MENTOR/MEMBER roles only)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "204": { "description": "File deleted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/files/view/{id}": {
+      "get": {
+        "tags": ["files"],
+        "summary": "Inline-view a stored file (URL written into avatarUrl/coverPhotoUrl)",
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes inline",
+            "content": {
+              "image/*": { "schema": { "type": "string", "format": "binary" } },
+              "application/octet-stream": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "UserDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "MongoDB ObjectId hex" },
+          "name": { "type": "string" },
+          "username": { "type": "string" },
+          "email": { "type": "string" },
+          "emailVerified": { "type": "boolean" },
+          "avatarUrl": { "type": "string", "nullable": true },
+          "coverPhotoUrl": { "type": "string", "nullable": true },
+          "role": { "type": "string" },
+          "permissions": { "type": "array", "items": { "type": "string" } },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "description": "HS512-signed JWT" },
+          "user": { "$ref": "#/components/schemas/UserDto" },
+          "expiresIn": { "type": "integer", "description": "Token lifetime in seconds" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "nullable": true },
+          "message": { "type": "string" },
+          "details": { "type": "object", "additionalProperties": { "type": "string" }, "nullable": true },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "UnauthorizedResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "enum": ["Unauthorized"] },
+          "message": { "type": "string" }
+        }
+      },
+      "RateLimitedResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "enum": ["Too many attempts. Please wait a moment and try again."] }
+        }
+      }
+    },
+    "responses": {
+      "AuthResponse": {
+        "description": "JWT plus the credential-domain user",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/AuthResponse" } }
+        }
+      },
+      "Validation": {
+        "description": "Blank required fields or weak password",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "InvalidArgument": {
+        "description": "Bad credentials, invalid/expired verification token, upload problems, unconfigured mail",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "ValidationOrInvalidArgument": {
+        "description": "Validation or invalid-argument failure",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, invalid, or expired bearer token",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/UnauthorizedResponse" } }
+        }
+      },
+      "Forbidden": {
+        "description": "Valid token but role not permitted",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "NotFound": {
+        "description": "User or file not found (including malformed ObjectIds)",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "Conflict": {
+        "description": "Username or email already registered",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "Internal": {
+        "description": "Unexpected failure",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Request body exceeds the 10 MB cap",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+        }
+      },
+      "RateLimited": {
+        "description": "Per-source-IP token bucket exhausted",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/RateLimitedResponse" } }
+        }
+      }
+    }
+  }
+}
