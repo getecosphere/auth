@@ -14,6 +14,7 @@ pub mod models;
 pub mod password;
 pub mod request_id;
 pub mod routes;
+pub mod signup_event;
 pub mod state;
 pub mod user_repo;
 

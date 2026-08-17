@@ -78,6 +78,34 @@ business errors (camelCase `code` values). Health is unauthenticated.
 - **Success 201:** `AuthResponse`.
 - **Errors:** same as register (no username-conflict case; email conflict 409
   `"Email is already registered"`).
+- **Outbound side effect:** when `SIGNUP_EVENT_URL` is configured, auth
+  fire-and-forget POSTs a `user.signed_up` domain event (see below).
+
+## Signup domain event (outbound webhook)
+
+When the estate sets `SIGNUP_EVENT_URL` (and optionally `SIGNUP_EVENT_TOKEN`)
+on the auth service's grants, auth publishes one opaque `user.signed_up`
+event per successful `register` / `register-with-profile`. Emission is
+fire-and-forget with a 5s timeout and never affects the register response.
+
+- **Auth required:** outgoing call sends `Authorization: Bearer <SIGNUP_EVENT_TOKEN>` when set.
+- **Request body (JSON POST):**
+
+  ```json
+  {
+    "event": "user.signed_up",
+    "userId": "507f1f77bcf86cd799439011",
+    "username": "alice",
+    "email": "alice@example.com",
+    "name": "Alice",
+    "role": "member",
+    "at": "2026-08-17T10:00:00Z"
+  }
+  ```
+
+Auth never interprets the URL or token — the composer decides who consumes
+the event (e.g. point it at the notifications LXS ingest endpoint so a signup
+creates an in-app notification).
 
 ### GET /api/auth/verify-email?token=…
 - **Purpose:** Consume a one-time verification link. The token is

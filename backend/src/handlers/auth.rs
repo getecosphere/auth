@@ -101,10 +101,7 @@ pub async fn register(
         ));
     }
 
-    let role = req
-        .role
-        .filter(|r| !r.is_empty())
-        .unwrap_or_else(|| "member".to_string());
+    let role = resolve_registration_role(&state, req.role.as_deref())?;
     let hashed = password::hash_password(&req.password)?;
     let user = user_repo::insert_user(&state, &req.username, &req.email, &hashed, &req.name, &role)
         .await?;
@@ -114,8 +111,29 @@ pub async fn register(
         let _ = user_repo::discard_unverified_new_user(&state, &user.id_string()).await;
         return Err(error);
     }
+    crate::signup_event::emit(state.config.clone(), &user);
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+/// Resolve the role for a new account. The estate declares its roles in
+/// ecompose.yml's `auth.roles` block; this binary never hardcodes one. A
+/// requested role must be in the declared set (`ECO_AUTH_ROLES`) or the account
+/// silently gets the declared default (`ECO_AUTH_DEFAULT_ROLE`). When no roles
+/// are declared the request is trusted as-is (legacy behavior).
+fn resolve_registration_role(state: &AppState, requested: Option<&str>) -> Result<String, AppError> {
+    let requested = requested.map(str::trim).filter(|r| !r.is_empty());
+    if state.config.allowed_roles.is_empty() {
+        return Ok(requested.unwrap_or(&state.config.default_role).to_string());
+    }
+    match requested {
+        Some(role) if state.config.allowed_roles.iter().any(|r| r == role) => Ok(role.to_string()),
+        Some(role) => Err(AppError::BadRequest(format!(
+            "Role \"{role}\" is not allowed on this estate. Allowed roles: {}",
+            state.config.allowed_roles.join(", ")
+        ))),
+        None => Ok(state.config.default_role.clone()),
+    }
 }
 
 pub async fn register_with_profile(
@@ -154,6 +172,7 @@ pub async fn register_with_profile(
         let _ = user_repo::discard_unverified_new_user(&state, &user.id_string()).await;
         return Err(error);
     }
+    crate::signup_event::emit(state.config.clone(), &user);
     let response = issue_auth_response(&state, &user)?;
     Ok((StatusCode::CREATED, Json(response)))
 }

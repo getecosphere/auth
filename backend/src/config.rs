@@ -41,6 +41,24 @@ pub struct AppConfig {
     pub mail_from_email: String,
     pub mail_from_name: String,
     pub auth_public_url: String,
+    /// Default role assigned to new accounts when the request does not carry
+    /// one. Declared by the estate in ecompose.yml's `auth.roles` block (Eco
+    /// writes it into this service's .env as `ECO_AUTH_DEFAULT_ROLE`) — never
+    /// hardcoded in the binary, so each estate picks its own identity model.
+    pub default_role: String,
+    /// Roles this estate accepts on registration (comma-separated from
+    /// `ECO_AUTH_ROLES`). Empty means the client-supplied role is trusted as-is
+    /// (legacy behavior); non-empty means a requested role must be in the list
+    /// or the account defaults to `default_role`.
+    pub allowed_roles: Vec<String>,
+    /// Optional outbound sink for the `user.signed_up` domain event. When set,
+    /// auth fire-and-forget POSTs a JSON event after each successful
+    /// registration. Auth never interprets this URL — the composer decides who
+    /// consumes it (e.g. the notifications LXS ingest endpoint).
+    pub signup_event_url: Option<String>,
+    /// Optional bearer token attached to the signup event POST. Auth never
+    /// mints or interprets it; the sink's owner supplies it.
+    pub signup_event_token: Option<String>,
 }
 
 impl AppConfig {
@@ -139,6 +157,25 @@ impl AppConfig {
                 })
                 .or_else(|| env::var("AUTH_PUBLIC_URL").ok())
                 .unwrap_or_default(),
+            default_role: env::var("ECO_AUTH_DEFAULT_ROLE")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "member".to_string()),
+            allowed_roles: env::var("ECO_AUTH_ROLES")
+                .unwrap_or_default()
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            signup_event_url: env::var("SIGNUP_EVENT_URL")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            signup_event_token: env::var("SIGNUP_EVENT_TOKEN")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
         })
     }
 }

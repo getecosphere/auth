@@ -1,5 +1,27 @@
 # auth changelog
 
+## 1.3.0 — signup domain event (2026-08-17)
+
+- **New:** optional `SIGNUP_EVENT_URL` (+ optional `SIGNUP_EVENT_TOKEN`). After
+  each successful `register`/`register-with-profile`, auth fire-and-forget
+  POSTs a `user.signed_up` event (JSON, bearer token, 5s timeout):
+
+  ```json
+  { "event": "user.signed_up", "userId": "<id>", "username": "...",
+    "email": "...", "name": "...", "role": "...", "at": "<rfc3339>" }
+  ```
+
+- Auth never interprets the sink URL or token — it is a pure outbox-style
+  domain event. The composer decides the consumer (e.g. the notifications LXS
+  ingest endpoint). A failing or slow sink never fails registration.
+- Contract: added optional `SIGNUP_EVENT_URL`, `SIGNUP_EVENT_TOKEN`; network
+  outbound widened to `http, https`.
+
+## 1.2.0 — multi-OS artifacts (2026-08-17)
+
+- Artifacts for all five targets: linux/amd64, linux/arm64, darwin/amd64,
+  darwin/arm64, windows/amd64 (same feature set as 1.1.0).
+
 ## 1.1.0 — pure identity (2026-08-16)
 
 - **Removed** avatar/cover-photo upload, file serving, and storage (S3/MinIO)
