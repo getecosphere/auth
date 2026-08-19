@@ -1,5 +1,10 @@
 # auth changelog
 
+## 2.1.0 (2026-08-19)
+- Contract v2: `contract.env` now ships a machine-readable `fields` schema (per-key `type`, `default`, `description`, `group`, `secret`, `managed`). Same binary, same env vars, same required keys — the format gained metadata only. `required`/`optional`/`defaults` are kept as derived views so consumers predating the v2 schema (eco < 0.4.2) still resolve the contract.
+- `managed:` ownership now declared in the contract: `JWT_SECRET` (shared-jwt), `MONGODB_URI` (mongo-db), `SERVER_PORT` (port), `CORS_ALLOWED_ORIGINS` (cors-origins), `ECO_AUTH_ROLES`/`ECO_AUTH_DEFAULT_ROLE` (identity-roles), `SIGNUP_EVENT_URL` (signup-event).
+- Config schema spec: see `eco-server/docs/lxs-config-schema-v2.md`.
+
 ## 2.0.0 (2026-08-19)
 - Logging contract: service logs now emitted as newline-delimited JSON (NDJSON) to stdout per the platform LXS logging contract (`ts`/`level`/`msg` + optional `service`,`request_id`,`status`,`latency_ms`,`user_id`,`error`). Breaking change — log output format changed.
 

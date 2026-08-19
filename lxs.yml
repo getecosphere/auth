@@ -1,6 +1,6 @@
 name: auth
 domain: auth
-version: 1.3.0
+version: 2.1.0
 publisher: stuff8
 status: unverified
 license: mit
@@ -12,9 +12,109 @@ targets:
 artifacts: {}
 
 contract:
-  version: 1
+  version: 2
   api: "auth REST API"
   env:
+    fields:
+      JWT_SECRET:
+        required: true
+        type: secret
+        managed: shared-jwt
+        description: "HS512 signing key shared by every estate service that validates tokens"
+      MONGODB_URI:
+        required: true
+        type: uri
+        managed: mongo-db
+        description: "MongoDB connection string for the estate's managed database"
+      SERVER_PORT:
+        required: true
+        type: int
+        managed: port
+        description: "Port the auth API listens on"
+      JWT_EXPIRATION:
+        type: int
+        default: "2592000000"
+        min: 60000
+        group: jwt
+        description: "JWT lifetime in milliseconds (30 days by default)"
+      API_BASE_URL:
+        type: url
+        group: server
+        description: "Public base URL clients use to reach this API; empty falls back to http://localhost:<port>/api"
+      CORS_ALLOWED_ORIGINS:
+        type: csv-url
+        managed: cors-origins
+        description: "Origins allowed to call this API; the first entry doubles as the app origin"
+      RATE_LIMIT_GENERAL_BURST:
+        type: int
+        default: "120"
+        min: 1
+        group: rate-limit
+        description: "Token-bucket burst for general routes"
+      RATE_LIMIT_GENERAL_REPLENISH_SECS:
+        type: int
+        default: "1"
+        min: 1
+        group: rate-limit
+        description: "Seconds per token refill for general routes"
+      RATE_LIMIT_AUTH_BURST:
+        type: int
+        default: "5"
+        min: 1
+        group: rate-limit
+        description: "Token-bucket burst for login/register/change-password"
+      RATE_LIMIT_AUTH_REPLENISH_SECS:
+        type: int
+        default: "10"
+        min: 1
+        group: rate-limit
+        description: "Seconds per token refill for credential routes"
+      EMAIL_VERIFICATION_REQUIRED:
+        type: bool
+        default: "false"
+        group: email
+        description: "Require users to verify their email before public interactions; requires BREVO_API_KEY"
+      EMAIL_VERIFICATION_TTL_HOURS:
+        type: int
+        default: "24"
+        min: 1
+        max: 8760
+        group: email
+        description: "Hours a verification link stays valid"
+      EMAIL_VERIFICATION_PUBLIC_URL:
+        type: url
+        group: email
+        description: "Public origin for verification links; empty uses the first CORS origin"
+      BREVO_API_KEY:
+        type: secret
+        group: email
+        description: "Brevo transactional API key used to send verification mail"
+      MAIL_FROM_EMAIL:
+        type: email
+        group: email
+        description: "Sender address for transactional mail"
+      MAIL_FROM_NAME:
+        type: string
+        default: "Auth"
+        group: email
+        description: "Sender display name for transactional mail"
+      ECO_AUTH_DEFAULT_ROLE:
+        type: string
+        managed: identity-roles
+        description: "Role assigned to new accounts (from the estate identity model)"
+      ECO_AUTH_ROLES:
+        type: csv
+        managed: identity-roles
+        description: "Roles accepted at registration (from the estate identity model)"
+      SIGNUP_EVENT_URL:
+        type: url
+        managed: signup-event
+        description: "Ingest endpoint for the user.signed_up event (fire-and-forget)"
+      SIGNUP_EVENT_TOKEN:
+        type: secret
+        description: "Bearer token for the signup event sink"
+    # Derived v1 views of `fields` above — kept for consumers that predate the
+    # contract v2 schema (eco < 0.4.2). `fields` is authoritative; keep in sync.
     required:
       - JWT_SECRET
       - MONGODB_URI
@@ -29,6 +129,7 @@ contract:
       - RATE_LIMIT_AUTH_REPLENISH_SECS
       - EMAIL_VERIFICATION_REQUIRED
       - EMAIL_VERIFICATION_TTL_HOURS
+      - EMAIL_VERIFICATION_PUBLIC_URL
       - ECO_AUTH_DEFAULT_ROLE
       - ECO_AUTH_ROLES
       - BREVO_API_KEY
@@ -36,6 +137,15 @@ contract:
       - MAIL_FROM_NAME
       - SIGNUP_EVENT_URL
       - SIGNUP_EVENT_TOKEN
+    defaults:
+      JWT_EXPIRATION: "2592000000"
+      RATE_LIMIT_GENERAL_BURST: "120"
+      RATE_LIMIT_GENERAL_REPLENISH_SECS: "1"
+      RATE_LIMIT_AUTH_BURST: "5"
+      RATE_LIMIT_AUTH_REPLENISH_SECS: "10"
+      EMAIL_VERIFICATION_REQUIRED: "false"
+      EMAIL_VERIFICATION_TTL_HOURS: "24"
+      MAIL_FROM_NAME: "Auth"
   db: mongodb@7
   network:
     inbound: [http]
