@@ -1,5 +1,9 @@
 # auth changelog
 
+## 3.0.1 (2026-08-20)
+- Artifacts: added `darwin/arm64` so estates composing `auth@3.0.0+` can run
+  `eco up dev` locally (previously linux/amd64 only).
+
 ## 3.0.0 (2026-08-19)
 - **Single active session per account.** Login/register mint a new session
   (`sessions` collection, one per user) that revokes every older one; the JWT
