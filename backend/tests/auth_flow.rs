@@ -216,3 +216,140 @@ async fn forged_signature_is_rejected() {
         .expect("change-password request");
     assert_eq!(res.status(), 401);
 }
+
+async fn register_user(app: &common::TestApp, username: &str) -> Value {
+    app.http
+        .post(app.url("/auth/register"))
+        .json(&json!({
+            "username": username, "email": format!("{username}@example.com"),
+            "password": "SessionPass1", "name": username
+        }))
+        .send()
+        .await
+        .expect("register request")
+        .json()
+        .await
+        .expect("register body")
+}
+
+#[tokio::test]
+async fn login_mints_a_session_id_and_second_login_revokes_the_first() {
+    let app = common::spawn().await;
+
+    let first = register_user(&app, "session_first").await;
+    let first_token = first["token"].as_str().unwrap().to_string();
+    let first_session = first["sessionId"].as_str().unwrap().to_string();
+    assert!(!first_session.is_empty());
+
+    // First token works while it is the active session.
+    let ok = app
+        .http
+        .get(app.url("/auth/session"))
+        .bearer_auth(&first_token)
+        .send()
+        .await
+        .expect("session request");
+    assert_eq!(ok.status(), 200);
+
+    // A second login supersedes the first: new session id, first token dead.
+    let second: Value = app
+        .http
+        .post(app.url("/auth/login"))
+        .json(&json!({ "username": "session_first", "password": "SessionPass1" }))
+        .send()
+        .await
+        .expect("second login request")
+        .json()
+        .await
+        .expect("login body");
+    let second_session = second["sessionId"].as_str().unwrap().to_string();
+    assert_ne!(second_session, first_session, "new login must mint a new session id");
+
+    let stale = app
+        .http
+        .get(app.url("/auth/session"))
+        .bearer_auth(&first_token)
+        .send()
+        .await
+        .expect("stale token request");
+    assert_eq!(stale.status(), 401, "the superseded token must be rejected");
+
+    // And the new token still works.
+    let current = app
+        .http
+        .get(app.url("/auth/session"))
+        .bearer_auth(second["token"].as_str().unwrap())
+        .send()
+        .await
+        .expect("current token request");
+    assert_eq!(current.status(), 200);
+}
+
+#[tokio::test]
+async fn logout_revokes_the_current_session() {
+    let app = common::spawn().await;
+
+    let register = register_user(&app, "session_logout").await;
+    let token = register["token"].as_str().unwrap().to_string();
+
+    let logout = app
+        .http
+        .post(app.url("/auth/logout"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("logout request");
+    assert_eq!(logout.status(), 204);
+
+    let after = app
+        .http
+        .get(app.url("/auth/session"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("post-logout request");
+    assert_eq!(after.status(), 401);
+}
+
+#[tokio::test]
+async fn session_status_reports_the_active_session() {
+    let app = common::spawn().await;
+
+    let register = register_user(&app, "session_status").await;
+    let token = register["token"].as_str().unwrap().to_string();
+
+    let status = app
+        .http
+        .get(app.url("/auth/session-status"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("session-status request");
+    assert_eq!(status.status(), 200);
+    let body: Value = status.json().await.expect("session-status body");
+    assert_eq!(body["active"], true);
+    assert_eq!(body["sessionId"], register["sessionId"]);
+    assert_eq!(body["username"], "session_status");
+    assert!(body["expiresInSeconds"].as_i64().unwrap() > 0);
+
+    // Superseded sessions 401 at the edge, so the gateway rejects them.
+    let login2: Value = app
+        .http
+        .post(app.url("/auth/login"))
+        .json(&json!({ "username": "session_status", "password": "SessionPass1" }))
+        .send()
+        .await
+        .expect("second login")
+        .json()
+        .await
+        .expect("login body");
+    let stale = app
+        .http
+        .get(app.url("/auth/session-status"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("stale session-status");
+    assert_eq!(stale.status(), 401);
+    let _ = login2;
+}

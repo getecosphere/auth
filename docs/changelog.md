@@ -1,5 +1,23 @@
 # auth changelog
 
+## 3.0.0 (2026-08-19)
+- **Single active session per account.** Login/register mint a new session
+  (`sessions` collection, one per user) that revokes every older one; the JWT
+  now carries a `sid` (session id) claim. Auth's middleware and the estate
+  gateway reject any token whose session is no longer active — the same
+  account can no longer stay signed in on two devices.
+- **Breaking:** bearer tokens without a `sid` are rejected (401) when
+  `SESSION_REQUIRED` is true (default) — every client must re-login once after
+  upgrade. Set `SESSION_REQUIRED=false` for a graceful legacy-token window
+  (legacy tokens cannot be revoked server-side).
+- **New:** `POST /api/auth/logout` revokes the caller's session;
+  `GET /api/auth/session-status` reports `{ active, sessionId, expiresInSeconds,
+  user }` for the presented token (the gateway polls it per protected request
+  to enforce single-session at the edge).
+- `AuthResponse` gains `sessionId`.
+- Contract: added optional `SESSION_REQUIRED` (bool, default true); v2 `fields`
+  schema updated.
+
 ## 2.1.0 (2026-08-19)
 - Contract v2: `contract.env` now ships a machine-readable `fields` schema (per-key `type`, `default`, `description`, `group`, `secret`, `managed`). Same binary, same env vars, same required keys — the format gained metadata only. `required`/`optional`/`defaults` are kept as derived views so consumers predating the v2 schema (eco < 0.4.2) still resolve the contract.
 - `managed:` ownership now declared in the contract: `JWT_SECRET` (shared-jwt), `MONGODB_URI` (mongo-db), `SERVER_PORT` (port), `CORS_ALLOWED_ORIGINS` (cors-origins), `ECO_AUTH_ROLES`/`ECO_AUTH_DEFAULT_ROLE` (identity-roles), `SIGNUP_EVENT_URL` (signup-event).

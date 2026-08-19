@@ -52,6 +52,25 @@ pub struct AuthResponse {
     pub token: String,
     pub user: UserDto,
     pub expires_in: i64,
+    /// The single active session id this token is bound to (also the JWT
+    /// `sid` claim). A newer login revokes it — the token then dies 401.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub session_id: String,
+}
+
+/// Single-session status for the presented bearer token. `active:false` means
+/// a newer login superseded this session (or it was logged out / expired) —
+/// the estate gateway returns 401 in that case and a frontend should clear its
+/// local session.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionStatus {
+    pub session_id: String,
+    pub active: bool,
+    pub expires_in_seconds: i64,
+    pub user_id: String,
+    pub username: String,
+    pub role: String,
 }
 
 #[derive(Debug, Serialize)]

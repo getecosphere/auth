@@ -14,6 +14,7 @@ pub mod models;
 pub mod password;
 pub mod request_id;
 pub mod routes;
+pub mod session_repo;
 pub mod signup_event;
 pub mod state;
 pub mod user_repo;
@@ -25,5 +26,6 @@ pub async fn bootstrap() -> anyhow::Result<axum::Router> {
     let db = client.default_database()
         .ok_or_else(|| anyhow::anyhow!("MONGODB_URI must include a database name"))?;
     let state = state::AppState::new(db, config.clone());
+    let _ = session_repo::ensure_indexes(&state).await;
     Ok(routes::build_router(state))
 }

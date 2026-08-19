@@ -251,6 +251,33 @@ creates an in-app notification).
 - **Success 200:** `UserDto`.
 - **Errors:** 401 when unauthenticated; 404 `RESOURCE_NOT_FOUND` `"User not found"`.
 
+### POST /api/auth/logout
+- **Purpose:** Revoke the caller's current session. The presented token's `sid`
+  is deleted, so it and any duplicate of it become invalid immediately.
+- **Auth required:** yes (bearer)
+- **Success 204:** no body.
+- **Errors:** 401 when unauthenticated.
+
+### GET /api/auth/session-status
+- **Purpose:** Single-session status for the presented token. The estate
+  gateway polls this per protected request and treats non-200 as "session
+  inactive" (deny); a frontend can use it to notice when a newer login
+  superseded the current session.
+- **Auth required:** yes (bearer). A revoked/expired/superseded session returns
+  **401** (so callers only need to distinguish 200 vs not-200).
+- **Success 200:**
+  ```json
+  {
+    "sessionId": "6658…",
+    "active": true,
+    "expiresInSeconds": 2592000,
+    "userId": "64f1…",
+    "username": "alice",
+    "role": "authenticated"
+  }
+  ```
+- **Errors:** 401 when unauthenticated or the session is no longer active.
+
 ### POST /api/auth/users/check-existence
 - **Purpose:** Given a list of usernames, return which of them already exist
   (used for uniqueness hints during onboarding).

@@ -46,7 +46,10 @@ pub fn emit(config: AppConfig, user: &User) {
         .clone()
         .filter(|t| !t.is_empty())
         .or_else(|| {
-            jwt::generate_token(&config.jwt_secret, SERVICE_SUB, "system", "service", 60_000)
+            // Service token: no session binding (empty sid). Sinks that
+            // validate estate tokens accept it; single-session checks only
+            // apply to user bearer tokens.
+            jwt::generate_token(&config.jwt_secret, SERVICE_SUB, "system", "service", "", 60_000)
                 .ok()
         });
     let user_id = user.id_string();

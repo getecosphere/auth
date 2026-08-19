@@ -68,7 +68,7 @@ pub async fn login(
         }
     };
 
-    Ok(Json(issue_auth_response(&state, &user)?))
+    Ok(Json(issue_auth_response(&state, &user).await?))
 }
 
 pub async fn register(
@@ -112,7 +112,7 @@ pub async fn register(
         return Err(error);
     }
     crate::signup_event::emit(state.config.clone(), &user);
-    let response = issue_auth_response(&state, &user)?;
+    let response = issue_auth_response(&state, &user).await?;
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -173,7 +173,7 @@ pub async fn register_with_profile(
         return Err(error);
     }
     crate::signup_event::emit(state.config.clone(), &user);
-    let response = issue_auth_response(&state, &user)?;
+    let response = issue_auth_response(&state, &user).await?;
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -405,15 +405,19 @@ pub async fn get_user_identity_by_email(
     Ok(Json(UserDto::from(&user)))
 }
 
-fn issue_auth_response(
+async fn issue_auth_response(
     state: &AppState,
     user: &crate::models::user::User,
 ) -> AppResult<AuthResponse> {
+    // Single active session per account: minting a new session revokes every
+    // older one, so the same login cannot live on two devices at once.
+    let session = crate::session_repo::create_session(state, &user.id_string(), None).await?;
     let token = jwt::generate_token(
         &state.config.jwt_secret,
         &user.id_string(),
         &user.username,
         &user.role,
+        &session.id_string(),
         state.config.jwt_expiration_ms,
     )?;
 
@@ -421,5 +425,55 @@ fn issue_auth_response(
         token,
         user: UserDto::from(user),
         expires_in: state.config.jwt_expiration_ms / 1000,
+        session_id: session.id_string(),
     })
+}
+
+/// Revoke the caller's current session — signing out the device that called.
+pub async fn logout(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> AppResult<StatusCode> {
+    if !auth.sid.is_empty() {
+        crate::session_repo::revoke_session(&state, &auth.sid).await?;
+    }
+    tracing::info!(user_id = %auth.user_id, session_id = %auth.sid, "session revoked (logout)");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Report whether the presented token's session is still the account's active
+/// one. The estate gateway calls this per protected request to enforce
+/// single-session at the edge; the frontend can poll it to notice when a newer
+/// login superseded the current session.
+pub async fn session_status(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> AppResult<Json<crate::dto::SessionStatus>> {
+    let (active, session_id, expires_in_seconds) = if !auth.sid.is_empty() {
+        let session = crate::session_repo::find_active_session(&state, &auth.sid).await?;
+        match session {
+            Some(session) => (
+                true,
+                session.id_string(),
+                (session.expires_at.timestamp_millis() - bson::DateTime::now().timestamp_millis())
+                    .max(0)
+                    / 1000,
+            ),
+            None => (false, auth.sid, 0),
+        }
+    } else {
+        (
+            !state.config.session_required,
+            String::new(),
+            state.config.jwt_expiration_ms / 1000,
+        )
+    };
+    Ok(Json(crate::dto::SessionStatus {
+        session_id,
+        active,
+        expires_in_seconds,
+        user_id: auth.user_id,
+        username: auth.username,
+        role: auth.role,
+    }))
 }

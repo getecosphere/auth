@@ -14,6 +14,9 @@ pub struct AuthUser {
     pub user_id: String,
     pub username: String,
     pub role: String,
+    /// Session id (`sid` claim) when the token carries one. Empty for legacy
+    /// pre-session tokens (accepted only while `SESSION_REQUIRED=false`).
+    pub sid: String,
 }
 
 pub struct AuthRejection(String);
@@ -52,10 +55,32 @@ impl FromRequestParts<AppState> for AuthUser {
         let claims = jwt::validate_token(&state.config.jwt_secret, token)
             .ok_or_else(|| AuthRejection("invalid or expired token".to_string()))?;
 
+        // Single-session enforcement: the token must carry the user's *current*
+        // active session id. A revoked/expired/never-issued session means a
+        // newer login superseded this one — reject it server-side.
+        if claims.sid.is_empty() {
+            if state.config.session_required {
+                return Err(AuthRejection(
+                    "session required — please sign in again".to_string(),
+                ));
+            }
+        } else {
+            let session = crate::session_repo::find_active_session(state, &claims.sid)
+                .await
+                .map_err(|_| AuthRejection("session check failed".to_string()))?
+                .ok_or_else(|| {
+                    AuthRejection("session no longer active — please sign in again".to_string())
+                })?;
+            if !session.user_id.to_hex().eq_ignore_ascii_case(&claims.sub) {
+                return Err(AuthRejection("session does not match token".to_string()));
+            }
+        }
+
         Ok(AuthUser {
             user_id: claims.sub,
             username: claims.username,
             role: claims.role,
+            sid: claims.sid,
         })
     }
 }

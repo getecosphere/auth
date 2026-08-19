@@ -59,6 +59,12 @@ pub struct AppConfig {
     /// Optional bearer token attached to the signup event POST. Auth never
     /// mints or interprets it; the sink's owner supplies it.
     pub signup_event_token: Option<String>,
+    /// Single-session enforcement. When true (default), a bearer token without
+    /// a `sid` claim is rejected (401), forcing every client to re-login after
+    /// an upgrade — that re-login mints a session and revokes older ones. Set
+    /// to false for a graceful rollout window where legacy tokens still work
+    /// (they cannot be revoked server-side).
+    pub session_required: bool,
 }
 
 impl AppConfig {
@@ -176,6 +182,9 @@ impl AppConfig {
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
+            session_required: env::var("SESSION_REQUIRED")
+                .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(true),
         })
     }
 }
