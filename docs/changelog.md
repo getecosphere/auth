@@ -1,5 +1,8 @@
 # auth changelog
 
+## 2.0.0 (2026-08-19)
+- Logging contract: service logs now emitted as newline-delimited JSON (NDJSON) to stdout per the platform LXS logging contract (`ts`/`level`/`msg` + optional `service`,`request_id`,`status`,`latency_ms`,`user_id`,`error`). Breaking change — log output format changed.
+
 ## 1.3.0 — signup domain event (2026-08-17)
 
 - **New:** optional `SIGNUP_EVENT_URL` (+ optional `SIGNUP_EVENT_TOKEN`). After
