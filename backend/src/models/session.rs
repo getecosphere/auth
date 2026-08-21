@@ -2,13 +2,15 @@ use bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 
 /// A login session — the auth LXS owns the session boundary. Exactly one
-/// active session exists per user at any time: issuing a new session revokes
-/// every older one, so the same account cannot stay signed in on two devices.
+/// active session exists per user at any time: login **rejects** a second
+/// sign-in while a session is already active (409) instead of minting a
+/// competing one, so the existing device stays signed in and the same
+/// account cannot live on two devices at once.
 ///
 /// The session id is carried inside the JWT as the `sid` claim. Auth's own
 /// middleware and the estate gateway (via `session-status`) both reject a
 /// token whose `sid` is no longer the active session, so a stale login dies
-/// server-side the moment a newer login happens.
+/// server-side the moment its session is revoked (logout) or expires.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]

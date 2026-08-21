@@ -22,6 +22,17 @@ async fn register_then_login_round_trip() {
     assert_eq!(register_body["user"]["username"], "alice");
     assert_eq!(register_body["user"]["role"], "member");
 
+    // Registration mints a session, so a raw login is rejected while it is
+    // active. Log out first, then login succeeds.
+    let logout = app
+        .http
+        .post(app.url("/auth/logout"))
+        .bearer_auth(register_body["token"].as_str().unwrap())
+        .send()
+        .await
+        .expect("logout request");
+    assert_eq!(logout.status(), 204);
+
     let login_res = app
         .http
         .post(app.url("/auth/login"))
@@ -151,6 +162,17 @@ async fn change_password_requires_correct_current_password() {
         .expect("change-password request");
     assert_eq!(correct.status(), 204);
 
+    // Registration session is still active, so log out before verifying the
+    // new password signs in.
+    let logout = app
+        .http
+        .post(app.url("/auth/logout"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("logout request");
+    assert_eq!(logout.status(), 204);
+
     let login_with_new_password = app
         .http
         .post(app.url("/auth/login"))
@@ -233,7 +255,7 @@ async fn register_user(app: &common::TestApp, username: &str) -> Value {
 }
 
 #[tokio::test]
-async fn login_mints_a_session_id_and_second_login_revokes_the_first() {
+async fn login_is_rejected_while_an_active_session_exists() {
     let app = common::spawn().await;
 
     let first = register_user(&app, "session_first").await;
@@ -251,38 +273,54 @@ async fn login_mints_a_session_id_and_second_login_revokes_the_first() {
         .expect("session request");
     assert_eq!(ok.status(), 200);
 
-    // A second login supersedes the first: new session id, first token dead.
-    let second: Value = app
+    // A second login is rejected with a clear conflict while the first
+    // session is active — it must not revoke the existing session.
+    let rejected = app
         .http
         .post(app.url("/auth/login"))
         .json(&json!({ "username": "session_first", "password": "SessionPass1" }))
         .send()
         .await
-        .expect("second login request")
-        .json()
-        .await
-        .expect("login body");
-    let second_session = second["sessionId"].as_str().unwrap().to_string();
-    assert_ne!(second_session, first_session, "new login must mint a new session id");
+        .expect("second login request");
+    assert_eq!(rejected.status(), 409);
+    let rejected_body: Value = rejected.json().await.expect("rejection body");
+    assert!(
+        rejected_body["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("another device"),
+        "rejection must carry an accurate message, got: {}",
+        rejected_body
+    );
 
-    let stale = app
+    // The existing session is untouched — the first token still works.
+    let still_active = app
         .http
         .get(app.url("/auth/session"))
         .bearer_auth(&first_token)
         .send()
         .await
-        .expect("stale token request");
-    assert_eq!(stale.status(), 401, "the superseded token must be rejected");
+        .expect("first token after rejected login");
+    assert_eq!(still_active.status(), 200);
 
-    // And the new token still works.
-    let current = app
+    // After logout the same credentials sign in again.
+    let logout = app
         .http
-        .get(app.url("/auth/session"))
-        .bearer_auth(second["token"].as_str().unwrap())
+        .post(app.url("/auth/logout"))
+        .bearer_auth(&first_token)
         .send()
         .await
-        .expect("current token request");
-    assert_eq!(current.status(), 200);
+        .expect("logout request");
+    assert_eq!(logout.status(), 204);
+
+    let relogin = app
+        .http
+        .post(app.url("/auth/login"))
+        .json(&json!({ "username": "session_first", "password": "SessionPass1" }))
+        .send()
+        .await
+        .expect("relogin request");
+    assert_eq!(relogin.status(), 200);
 }
 
 #[tokio::test]
@@ -332,24 +370,42 @@ async fn session_status_reports_the_active_session() {
     assert_eq!(body["username"], "session_status");
     assert!(body["expiresInSeconds"].as_i64().unwrap() > 0);
 
-    // Superseded sessions 401 at the edge, so the gateway rejects them.
-    let login2: Value = app
+    // A second login is rejected while the session is active, so the token
+    // stays valid — the gateway keeps passing session-status checks.
+    let rejected = app
         .http
         .post(app.url("/auth/login"))
         .json(&json!({ "username": "session_status", "password": "SessionPass1" }))
         .send()
         .await
-        .expect("second login")
-        .json()
-        .await
-        .expect("login body");
-    let stale = app
+        .expect("second login");
+    assert_eq!(rejected.status(), 409);
+
+    let still_active = app
         .http
         .get(app.url("/auth/session-status"))
         .bearer_auth(&token)
         .send()
         .await
-        .expect("stale session-status");
-    assert_eq!(stale.status(), 401);
-    let _ = login2;
+        .expect("session-status after rejected login");
+    assert_eq!(still_active.status(), 200);
+
+    // Once the session is revoked (logout), session-status turns into 401 so
+    // the gateway denies the stale token at the edge.
+    let logout = app
+        .http
+        .post(app.url("/auth/logout"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("logout");
+    assert_eq!(logout.status(), 204);
+    let revoked = app
+        .http
+        .get(app.url("/auth/session-status"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .expect("session-status after logout");
+    assert_eq!(revoked.status(), 401);
 }

@@ -68,6 +68,20 @@ pub async fn create_session(
     Ok(Session { id: Some(id), ..session })
 }
 
+/// Whether the user already holds an active (unexpired) session. Login uses
+/// this to reject a second sign-in while one device is already signed in —
+/// the existing session is preserved instead of being revoked.
+pub async fn has_active_session(state: &AppState, user_id: &str) -> Result<bool, AppError> {
+    let Ok(oid) = ObjectId::parse_str(user_id) else {
+        return Ok(false);
+    };
+    let now = bson::DateTime::now();
+    let found = sessions(state)
+        .find_one(doc! { "userId": oid, "expiresAt": { "$gt": now } }, None)
+        .await?;
+    Ok(found.is_some())
+}
+
 /// Look up an active (unexpired) session by its id. Returns None for a
 /// revoked, expired, or never-issued id.
 pub async fn find_active_session(state: &AppState, sid: &str) -> Result<Option<Session>, AppError> {

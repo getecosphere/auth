@@ -42,6 +42,7 @@ business errors (camelCase `code` values). Health is unauthenticated.
 - **Errors:**
   - 400 → `{"code":"VALIDATION_ERROR","message":"Validation failed","details":{"username":"username is required"},"timestamp":"..."}` when username/password blank
   - 400 → `{"code":"INVALID_ARGUMENT","message":"Invalid credentials","timestamp":"..."}` when credentials are wrong
+  - 409 → `{"code":"ALREADY_EXISTS","message":"Already signed in on another device. Sign out from that device first.","timestamp":"..."}` when the account already has an active session (single active session per account — sign out or wait for expiry before signing in again)
 
 ### POST /api/auth/register
 - **Purpose:** Create an account and immediately issue a usable local session
@@ -261,9 +262,9 @@ creates an in-app notification).
 ### GET /api/auth/session-status
 - **Purpose:** Single-session status for the presented token. The estate
   gateway polls this per protected request and treats non-200 as "session
-  inactive" (deny); a frontend can use it to notice when a newer login
-  superseded the current session.
-- **Auth required:** yes (bearer). A revoked/expired/superseded session returns
+  inactive" (deny); a frontend can use it to notice when its session was
+  revoked (logout) or expired.
+- **Auth required:** yes (bearer). A revoked/expired session returns
   **401** (so callers only need to distinguish 200 vs not-200).
 - **Success 200:**
   ```json
@@ -343,7 +344,7 @@ creates an in-app notification).
 | `INVALID_ARGUMENT` | 400 | `{"code":"INVALID_ARGUMENT","message":"<reason>",...}` | Bad login credentials, bad/expired verification token, wrong current password, unconfigured email verification |
 | `RESOURCE_NOT_FOUND` | 404 | `{"code":"RESOURCE_NOT_FOUND","message":"User not found: <id>",...}` | Missing user/file (also for malformed ObjectIds) |
 | `ACCESS_DENIED` | 403 | `{"code":"ACCESS_DENIED","message":"Access denied",...}` | Valid JWT but role not permitted |
-| `ALREADY_EXISTS` | 409 | `{"code":"ALREADY_EXISTS","message":"Username is already taken",...}` | Register with taken username/email |
+| `ALREADY_EXISTS` | 409 | `{"code":"ALREADY_EXISTS","message":"Username is already taken",...}` | Register with taken username/email, or login while the account already has an active session |
 | `INTERNAL_SERVER_ERROR` | 500 | `{"code":"INTERNAL_SERVER_ERROR","message":"An unexpected error occurred",...}` | Any unexpected failure (details logged server-side) |
 | `Unauthorized` | 401 | `{"error":"Unauthorized","message":"Unauthorized: missing bearer token"}` / `"... invalid or expired token"` | Missing/invalid/expired `Authorization: Bearer` header |
 | `rate limited` | 429 | `{"error":"Too many attempts. Please wait a moment and try again."}` | Per-source-IP token bucket exhausted |

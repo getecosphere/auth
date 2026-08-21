@@ -68,6 +68,22 @@ pub async fn login(
         }
     };
 
+    // Single active session: a second sign-in while one device is already
+    // signed in is rejected rather than silently revoking the existing
+    // session — the current device stays logged in and the caller gets an
+    // accurate reason instead of a generic failure. Sign out first (or wait
+    // for the session to expire) to sign in again.
+    if crate::session_repo::has_active_session(&state, &user.id_string()).await? {
+        tracing::warn!(
+            user_id = %user.id_string(),
+            username = %req.username,
+            "login rejected: account already has an active session"
+        );
+        return Err(AppError::Conflict(
+            "Already signed in on another device. Sign out from that device first.".to_string(),
+        ));
+    }
+
     Ok(Json(issue_auth_response(&state, &user).await?))
 }
 

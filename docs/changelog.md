@@ -1,5 +1,18 @@
 # auth changelog
 
+## 3.1.0 (2026-08-21)
+- **Login rejects a second sign-in while a session is active.** Previously a
+  new login silently revoked every older session ("last one wins"), which
+  kicked the already-signed-in device out with no accurate explanation.
+  Now `POST /api/auth/login` returns **409 `ALREADY_EXISTS`** with an accurate
+  message (`"Already signed in on another device. Sign out from that device
+  first."`) and the existing session is left untouched. Log out (or wait for
+  the session to expire) before signing in again.
+- `GET /api/auth/session-status` and the estate gateway are unchanged: a
+  token whose session was revoked (logout) or expired still 401s at the edge.
+- This is the intended single-session UX — the current device is the source
+  of truth and stays signed in; duplicates are blocked, not displaced.
+
 ## 3.0.1 (2026-08-20)
 - Artifacts: added `darwin/arm64` so estates composing `auth@3.0.0+` can run
   `eco up dev` locally (previously linux/amd64 only).
