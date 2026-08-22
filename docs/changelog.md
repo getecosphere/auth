@@ -1,5 +1,10 @@
 # auth changelog
 
+## 3.3.1 (2026-08-23)
+- Added the `darwin/arm64` artifact required by `eco up dev` / `eco serve` on
+  Apple Silicon. This matches Auth's documented multi-OS local-development
+  contract.
+
 ## 3.3.0 (2026-08-23)
 - Password recovery can now use Eco's platform relay during an active
   `eco serve` session when an estate has not supplied its own Brevo sender.
