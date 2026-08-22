@@ -21,10 +21,10 @@ the binary, so read this before deploying or writing consumers.
   `expiresIn` (seconds) so the frontend can proactively invalidate the
   session instead of 401-retry looping (WebSockets went silently dead before
   this was fixed).
-- **Email verification is currently DISABLED until Brevo is configured.** The
-  shipped `.env.example` sets `EMAIL_VERIFICATION_REQUIRED=false`. Note the
-  code default is `true`: if verification is required but `BREVO_API_KEY`,
-  `MAIL_FROM_EMAIL`, and the public URL are missing, `POST /api/auth/register`
+- **Email verification is enabled by default.** The shipped `.env.example`
+  sets `EMAIL_VERIFICATION_REQUIRED=true`. If verification is required but an
+  estate Brevo sender *or* a scoped `eco serve` relay and the public URL are
+  missing, `POST /api/auth/register`
   (and `register-with-profile`) return 400
   `"Registration is not yet available because the email verification service
   has not been configured."` — registration is a hard no-op on an unconfigured
@@ -33,8 +33,8 @@ the binary, so read this before deploying or writing consumers.
 - **Verification links are single-use and time-boxed.** Token format
   `<recordId>.<secret>`, link = `{public_url}/auth/verify-email/?token=…`
   with a **trailing slash** on the route (Astro emits a static
-  `auth/verify-email/index.html`; without the slash a static host may 404 or
-  serve the app root). Expires after `EMAIL_VERIFICATION_TTL_HOURS` (24) and
+  `verify-email`; Auth UI owns this public page. Expires after
+  `EMAIL_VERIFICATION_TTL_HOURS` (24) and
   can be used once; `resend-verification` invalidates the previous link.
 - **Never trust a browser `emailVerified` flag.** Before publishing content,
   starting a negotiation, public chat, or any user↔user connection, a domain

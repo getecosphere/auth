@@ -6,7 +6,18 @@ the binary contract; consumers receive the released binary and `docs/` bundle.
 ## Compose safely
 
 Add the published binary with `eco lxs add auth@<version>` from an estate. Do
-not copy Auth source into an estate. Compose it with `gateway` and `auth-ui`:
+not copy Auth source into an estate. Eco reads Auth's `compose:` contract and
+adds its port, grants, deny-by-default Gateway routes, main-estate membership,
+and this visible secure identity policy automatically:
+
+```yaml
+auth:
+  email_verification:
+    enabled: true
+```
+
+`eco lxs setup auth --force` migrates an older estate intentionally. Set this
+to `false` only as an explicit, reviewed exception. The generated service is:
 
 ```yaml
 services:
@@ -49,16 +60,17 @@ Auth selects delivery in this order:
    estate explicitly supplies its own Brevo account; it always takes priority.
 2. The short-lived `EMAIL_RELAY_URL` plus `EMAIL_RELAY_TOKEN` injected by
    `eco serve` — Eco scopes this capability to one active temporary hostname,
-   accepts only `/reset-password` links for that hostname, and applies a small
-   recovery-only rate budget. It is **not** a generic send-email credential.
+   accepts only Auth's `/reset-password` and `/verify-email` links for that
+   hostname, and applies a small Auth-mail rate budget. It is **not** a generic
+   send-email credential.
 3. No delivery configuration — the endpoint still returns its generic 202 to
    prevent account enumeration, but no token/mail is created.
 
 Never hand-write relay values in `ecompose.yml`, source, or a permanent
 production `.env`. `eco serve` supplies them transiently; deployed estates
-continue to use their configured provider credentials. Email verification and
-generic transactional mail remain estate-provider features — the platform
-relay is deliberately limited to password recovery.
+continue to use their configured provider credentials. Generic transactional
+mail remains an estate-provider feature; the platform relay is deliberately
+limited to Auth verification and recovery.
 
 ## Ownership
 

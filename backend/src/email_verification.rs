@@ -89,10 +89,11 @@ fn stuff8_cta_button(href: &str, label: &str, fallback: &str) -> String {
 /// verification but cannot deliver a verification link. This keeps a typo in
 /// local/prod mail configuration from leaving behind an unusable account.
 pub fn ensure_delivery_configured(config: &AppConfig) -> AppResult<()> {
+    let estate_provider = !config.brevo_api_key.is_empty() && !config.mail_from_email.is_empty();
+    let platform_relay =
+        !config.email_relay_url.trim().is_empty() && !config.email_relay_token.is_empty();
     if config.email_verification_required
-        && (config.brevo_api_key.is_empty()
-            || config.mail_from_email.is_empty()
-            || config.auth_public_url.is_empty())
+        && (!estate_provider && !platform_relay || config.auth_public_url.is_empty())
     {
         return Err(AppError::BadRequest(
             "Pendaftaran belum tersedia karena layanan verifikasi email belum dikonfigurasi."
@@ -129,11 +130,10 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<Option<St
         )
         .await?;
     verifications(state).insert_one(&record, None).await?;
-    // Astro emits this route as auth/verify-email/index.html. Keep the
-    // trailing slash so a static production server resolves that directory
-    // rather than falling back to the application's root page.
+    // Auth UI owns this public, white-label verification page. Keep the path
+    // stable because Eco's scoped email relay validates it before sending.
     let url = format!(
-        "{}/auth/verify-email/?token={}.{}",
+        "{}/verify-email?token={}.{}",
         state.config.auth_public_url.trim_end_matches('/'),
         record.id,
         secret
@@ -144,46 +144,68 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<Option<St
         html_escape(&user.name),
         state.config.email_verification_ttl_hours
     );
-    let body = serde_json::json!({
-        "sender": { "email": state.config.mail_from_email, "name": state.config.mail_from_name },
-        "to": [{ "email": user.email, "name": user.name }],
-        "subject": headline,
-        "htmlContent": stuff8_email_shell(
-            headline,
-            &message,
-            &stuff8_cta_button(&url, "Verifikasi email", &url),
-        ),
-    });
+    if !state.config.brevo_api_key.is_empty() && !state.config.mail_from_email.is_empty() {
+        let body = serde_json::json!({
+            "sender": { "email": state.config.mail_from_email, "name": state.config.mail_from_name },
+            "to": [{ "email": user.email, "name": user.name }],
+            "subject": headline,
+            "htmlContent": stuff8_email_shell(
+                headline,
+                &message,
+                &stuff8_cta_button(&url, "Verifikasi email", &url),
+            ),
+        });
+        let response = reqwest::Client::new()
+            .post("https://api.brevo.com/v3/smtp/email")
+            .header("api-key", &state.config.brevo_api_key)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
+        let status = response.status();
+        let response_body = response.text().await.unwrap_or_default();
+        if !status.is_success() {
+            tracing::error!(%status, response = %response_body, "Brevo rejected verification email");
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "Brevo rejected verification email: {status}"
+            )));
+        }
+        let message_id = serde_json::from_str::<serde_json::Value>(&response_body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("messageId")
+                    .and_then(|id| id.as_str())
+                    .map(str::to_owned)
+            });
+        tracing::info!(user_id = %user.id_string(), email = %user.email, message_id = message_id.as_deref().unwrap_or("unavailable"), "Brevo accepted verification email");
+        return Ok(message_id);
+    }
+
+    // The platform relay carries a hostname-scoped capability from `eco serve`.
+    // It accepts only Auth's own verification/reset URLs, never arbitrary mail.
     let response = reqwest::Client::new()
-        .post("https://api.brevo.com/v3/smtp/email")
-        .header("api-key", &state.config.brevo_api_key)
-        .json(&body)
+        .post(state.config.email_relay_url.trim())
+        .bearer_auth(&state.config.email_relay_token)
+        .json(&serde_json::json!({
+            "kind": "verification",
+            "to": &user.email,
+            "name": &user.name,
+            "verification_url": &url,
+            "ttl_hours": state.config.email_verification_ttl_hours,
+        }))
         .send()
         .await
-        .map_err(|e| AppError::Internal(e.into()))?;
-    let status = response.status();
-    let response_body = response.text().await.unwrap_or_default();
-    if !status.is_success() {
-        tracing::error!(%status, response = %response_body, "Brevo rejected verification email");
+        .map_err(|error| AppError::Internal(error.into()))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        tracing::error!(%status, user_id = %user.id_string(), "platform verification relay rejected email");
         return Err(AppError::Internal(anyhow::anyhow!(
-            "Brevo rejected verification email: {status}"
+            "platform verification relay rejected email: {status}"
         )));
     }
-    let message_id = serde_json::from_str::<serde_json::Value>(&response_body)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("messageId")
-                .and_then(|id| id.as_str())
-                .map(str::to_owned)
-        });
-    tracing::info!(
-        user_id = %user.id_string(),
-        email = %user.email,
-        message_id = message_id.as_deref().unwrap_or("unavailable"),
-        "Brevo accepted verification email"
-    );
-    Ok(message_id)
+    tracing::info!(user_id = %user.id_string(), "platform verification relay accepted email");
+    Ok(None)
 }
 
 /// Sends a fully-rendered transactional email on behalf of another domain.
@@ -276,6 +298,7 @@ pub async fn send_password_reset_email(
         .post(state.config.email_relay_url.trim())
         .bearer_auth(&state.config.email_relay_token)
         .json(&serde_json::json!({
+            "kind": "password_reset",
             "to": &user.email,
             "name": &user.name,
             "reset_url": url,

@@ -1,5 +1,14 @@
 # auth changelog
 
+## 3.4.0 (2026-08-23)
+- Email verification is now secure-by-default
+  (`EMAIL_VERIFICATION_REQUIRED=true`).
+- Added Auth's `compose:` recipe: `eco lxs add` can now materialize its port,
+  grants, Gateway routes and visible `auth.email_verification.enabled: true`
+  estate policy.
+- The scoped Eco Serve relay now accepts Auth verification links as well as
+  password-recovery links. Estate-owned Brevo remains the first choice.
+
 ## 3.3.1 (2026-08-23)
 - Added the `darwin/arm64` artifact required by `eco up dev` / `eco serve` on
   Apple Silicon. This matches Auth's documented multi-OS local-development

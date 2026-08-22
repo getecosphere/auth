@@ -69,6 +69,15 @@ pub async fn login(
         }
     };
 
+    // Mailbox ownership is an authentication prerequisite, not merely a
+    // capability flag after a session has already been minted.
+    if state.config.email_verification_required && user.email_verified_at.is_none() {
+        return Err(AppError::Forbidden(
+            "Verify your email before signing in. Check your inbox for the verification link."
+                .to_string(),
+        ));
+    }
+
     // Single active session: a second sign-in while one device is already
     // signed in is rejected rather than silently revoking the existing
     // session — the current device stays logged in and the caller gets an
@@ -129,7 +138,11 @@ pub async fn register(
         return Err(error);
     }
     crate::signup_event::emit(state.config.clone(), &user);
-    let response = issue_auth_response(&state, &user).await?;
+    let response = if state.config.email_verification_required {
+        pending_verification_response(&user)
+    } else {
+        issue_auth_response(&state, &user).await?
+    };
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -193,7 +206,11 @@ pub async fn register_with_profile(
         return Err(error);
     }
     crate::signup_event::emit(state.config.clone(), &user);
-    let response = issue_auth_response(&state, &user).await?;
+    let response = if state.config.email_verification_required {
+        pending_verification_response(&user)
+    } else {
+        issue_auth_response(&state, &user).await?
+    };
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -498,6 +515,19 @@ async fn issue_auth_response(
         expires_in: state.config.jwt_expiration_ms / 1000,
         session_id: session.id_string(),
     })
+}
+
+/// Registration succeeds only after the verification email is accepted, but
+/// it must never mint a usable session before the mailbox is proven. Keeping
+/// the familiar response shape lets white-label Auth UI show a clear next step
+/// without exposing a bearer token.
+fn pending_verification_response(user: &crate::models::user::User) -> AuthResponse {
+    AuthResponse {
+        token: String::new(),
+        user: UserDto::from(user),
+        expires_in: 0,
+        session_id: String::new(),
+    }
 }
 
 /// Revoke the caller's current session — signing out the device that called.
