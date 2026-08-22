@@ -18,6 +18,7 @@ pub struct ErrorResponse {
     timestamp: chrono::DateTime<Utc>,
 }
 
+#[derive(Debug)]
 pub enum AppError {
     Validation(HashMap<String, String>),
     NotFound(String),

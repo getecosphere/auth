@@ -1,5 +1,14 @@
 # auth changelog
 
+## 3.2.0 (2026-08-22)
+- Added secure password recovery: `POST /api/auth/forgot-password` always
+  returns a generic 202, and `POST /api/auth/reset-password` accepts a
+  bcrypt-hashed, single-use, expiring email token.
+- Reset success revokes all previous sessions. Added optional
+  `PASSWORD_RESET_TTL_MINUTES` (default 60, bounded to 5–1,440).
+- Corrected domain ownership documentation: avatar/cover and all profile
+  content belong to `profile` + `storage`, not Auth.
+
 ## 3.1.0 (2026-08-21)
 - **Login rejects a second sign-in while a session is active.** Previously a
   new login silently revoked every older session ("last one wins"), which

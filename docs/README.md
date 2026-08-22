@@ -4,19 +4,19 @@
 
 Identity and credentials for the whole estate. Handles registration, login
 (by username or email), JWT issuance/validation (HS512), email-ownership
-verification, password change/verify, the shared profile-identity fields
-(name, avatar, cover photo), and transactional email delivery on behalf of
+verification, password recovery, password change/verify, and transactional email delivery on behalf of
 other domains. If a consumer needs to know *who* an actor is, verify a
 bearer token, or send a transactional email, this is the domain.
 
 ## What it owns / never owns
 
 - **Owns:** accounts, bcrypt password hashes, JWTs, email-ownership
-  verification records, profile identity fields (`name`, `avatarUrl`,
-  `coverPhotoUrl`), the `users`, `email_verifications` and `files`
-  collections, Brevo mail-provider credentials.
-- **Never owns:** profile content fields (bio, experiences, headline —
-  owned by lms-backend now), other domains' email templates/business data,
+  verification records, password-reset records, the `users`,
+  `email_verifications`, `password_resets`, and `sessions` collections, and
+  Brevo mail-provider credentials.
+- **Never owns:** profile content fields or avatars (bio, avatar, headline,
+  and other person-facing data belong to `profile` + `storage`), other
+  domains' email templates/business data,
   the rules that map access-right tokens to capabilities (that lives in the
   composition/core domain).
 

@@ -12,6 +12,7 @@ pub mod handlers;
 pub mod jwt;
 pub mod models;
 pub mod password;
+pub mod password_reset;
 pub mod request_id;
 pub mod routes;
 pub mod session_repo;
@@ -23,9 +24,11 @@ pub async fn bootstrap() -> anyhow::Result<axum::Router> {
     let _ = dotenvy::dotenv();
     let config = config::AppConfig::from_env()?;
     let client = mongodb::Client::with_uri_str(&config.mongodb_uri).await?;
-    let db = client.default_database()
+    let db = client
+        .default_database()
         .ok_or_else(|| anyhow::anyhow!("MONGODB_URI must include a database name"))?;
     let state = state::AppState::new(db, config.clone());
     let _ = session_repo::ensure_indexes(&state).await;
+    let _ = password_reset::ensure_indexes(&state).await;
     Ok(routes::build_router(state))
 }

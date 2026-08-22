@@ -8,8 +8,9 @@ use crate::{
     auth_extractor::AuthUser,
     dto::{
         AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse,
-        EmailVerificationStatus, LoginRequest, RegisterQuery, RegisterWithProfileQuery, UserDto,
-        VerifyPasswordRequest, VerifyPasswordResponse,
+        EmailVerificationStatus, LoginRequest, PasswordResetConfirmRequest, PasswordResetRequest,
+        RegisterQuery, RegisterWithProfileQuery, UserDto, VerifyPasswordRequest,
+        VerifyPasswordResponse,
     },
     email_verification,
     error::{require_non_blank, require_password_strength, AppError, AppResult},
@@ -137,7 +138,10 @@ pub async fn register(
 /// requested role must be in the declared set (`ECO_AUTH_ROLES`) or the account
 /// silently gets the declared default (`ECO_AUTH_DEFAULT_ROLE`). When no roles
 /// are declared the request is trusted as-is (legacy behavior).
-fn resolve_registration_role(state: &AppState, requested: Option<&str>) -> Result<String, AppError> {
+fn resolve_registration_role(
+    state: &AppState,
+    requested: Option<&str>,
+) -> Result<String, AppError> {
     let requested = requested.map(str::trim).filter(|r| !r.is_empty());
     if state.config.allowed_roles.is_empty() {
         return Ok(requested.unwrap_or(&state.config.default_role).to_string());
@@ -351,6 +355,57 @@ pub async fn verify_password(
     Ok(Json(VerifyPasswordResponse { valid }))
 }
 
+/// Starts the password-recovery flow. This response never says whether the
+/// email exists; doing so would turn the endpoint into an account directory.
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    Json(req): Json<PasswordResetRequest>,
+) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
+    let email = req.email.trim();
+    if !email.is_empty() {
+        match user_repo::find_by_email(&state, email).await? {
+            Some(user) => {
+                if let Err(error) = crate::password_reset::issue(&state, &user).await {
+                    tracing::error!(user_id = %user.id_string(), ?error, "password reset delivery failed");
+                }
+            }
+            None => {
+                // Pay the bcrypt cost even for an unknown address so the
+                // observable timing stays closer to the known-account path.
+                let _ = password::hash_password("password-reset-timing-padding");
+            }
+        }
+    }
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "accepted": true,
+            "message": "Jika alamat email terdaftar, kami telah mengirim tautan untuk mengatur ulang password."
+        })),
+    ))
+}
+
+/// Completes a password recovery without requiring the old password. The
+/// one-time token proves mailbox control; all prior sessions are revoked.
+pub async fn reset_password(
+    State(state): State<AppState>,
+    Json(req): Json<PasswordResetConfirmRequest>,
+) -> AppResult<StatusCode> {
+    require_non_blank(&[("token", &req.token), ("newPassword", &req.new_password)])?;
+    require_password_strength(&req.new_password)?;
+    let user_id = crate::password_reset::consume(&state, req.token.trim()).await?;
+    let user = user_repo::find_by_id(&state, &user_id)
+        .await?
+        .ok_or_else(|| {
+            AppError::BadRequest("Tautan reset password tidak valid atau sudah kedaluwarsa.".into())
+        })?;
+    let hash = password::hash_password(&req.new_password)?;
+    user_repo::update_password(&state, &user.id_string(), &hash).await?;
+    crate::session_repo::revoke_all_for_user(&state, &user.id_string()).await?;
+    tracing::info!(user_id = %user.id_string(), "password reset completed and sessions revoked");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn update_identity(
     State(state): State<AppState>,
     auth: AuthUser,
@@ -446,10 +501,7 @@ async fn issue_auth_response(
 }
 
 /// Revoke the caller's current session — signing out the device that called.
-pub async fn logout(
-    State(state): State<AppState>,
-    auth: AuthUser,
-) -> AppResult<StatusCode> {
+pub async fn logout(State(state): State<AppState>, auth: AuthUser) -> AppResult<StatusCode> {
     if !auth.sid.is_empty() {
         crate::session_repo::revoke_session(&state, &auth.sid).await?;
     }

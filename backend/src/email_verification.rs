@@ -95,7 +95,8 @@ pub fn ensure_delivery_configured(config: &AppConfig) -> AppResult<()> {
             || config.auth_public_url.is_empty())
     {
         return Err(AppError::BadRequest(
-            "Pendaftaran belum tersedia karena layanan verifikasi email belum dikonfigurasi.".into(),
+            "Pendaftaran belum tersedia karena layanan verifikasi email belum dikonfigurasi."
+                .into(),
         ));
     }
     Ok(())
@@ -111,17 +112,32 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<Option<St
     ensure_delivery_configured(&state.config)?;
     let secret = Uuid::new_v4().to_string();
     let record = EmailVerification {
-        id: Uuid::new_v4().to_string(), user_id: user.id_string(),
+        id: Uuid::new_v4().to_string(),
+        user_id: user.id_string(),
         token_hash: password::hash_password(&secret)?,
-        expires_at: DateTime::from_chrono(chrono::Utc::now() + chrono::Duration::hours(state.config.email_verification_ttl_hours)),
-        used_at: None, created_at: DateTime::now(),
+        expires_at: DateTime::from_chrono(
+            chrono::Utc::now() + chrono::Duration::hours(state.config.email_verification_ttl_hours),
+        ),
+        used_at: None,
+        created_at: DateTime::now(),
     };
-    verifications(state).update_many(doc! { "userId": &record.user_id, "usedAt": null }, doc! { "$set": { "usedAt": DateTime::now() } }, None).await?;
+    verifications(state)
+        .update_many(
+            doc! { "userId": &record.user_id, "usedAt": null },
+            doc! { "$set": { "usedAt": DateTime::now() } },
+            None,
+        )
+        .await?;
     verifications(state).insert_one(&record, None).await?;
     // Astro emits this route as auth/verify-email/index.html. Keep the
     // trailing slash so a static production server resolves that directory
     // rather than falling back to the application's root page.
-    let url = format!("{}/auth/verify-email/?token={}.{}", state.config.auth_public_url.trim_end_matches('/'), record.id, secret);
+    let url = format!(
+        "{}/auth/verify-email/?token={}.{}",
+        state.config.auth_public_url.trim_end_matches('/'),
+        record.id,
+        secret
+    );
     let headline = "Verifikasi email akunmu";
     let message = format!(
         r#"Halo <strong>{}</strong>,<br /><br />Satu langkah lagi — konfirmasi alamat email ini untuk mengamankan akun Stuff8-mu. Tombol di bawah berlaku <strong>{} jam</strong> dan hanya bisa digunakan sekali."#,
@@ -138,18 +154,29 @@ pub async fn send_for_user(state: &AppState, user: &User) -> AppResult<Option<St
             &stuff8_cta_button(&url, "Verifikasi email", &url),
         ),
     });
-    let response = reqwest::Client::new().post("https://api.brevo.com/v3/smtp/email")
-        .header("api-key", &state.config.brevo_api_key).json(&body).send().await
+    let response = reqwest::Client::new()
+        .post("https://api.brevo.com/v3/smtp/email")
+        .header("api-key", &state.config.brevo_api_key)
+        .json(&body)
+        .send()
+        .await
         .map_err(|e| AppError::Internal(e.into()))?;
     let status = response.status();
     let response_body = response.text().await.unwrap_or_default();
     if !status.is_success() {
         tracing::error!(%status, response = %response_body, "Brevo rejected verification email");
-        return Err(AppError::Internal(anyhow::anyhow!("Brevo rejected verification email: {status}")));
+        return Err(AppError::Internal(anyhow::anyhow!(
+            "Brevo rejected verification email: {status}"
+        )));
     }
     let message_id = serde_json::from_str::<serde_json::Value>(&response_body)
         .ok()
-        .and_then(|value| value.get("messageId").and_then(|id| id.as_str()).map(str::to_owned));
+        .and_then(|value| {
+            value
+                .get("messageId")
+                .and_then(|id| id.as_str())
+                .map(str::to_owned)
+        });
     tracing::info!(
         user_id = %user.id_string(),
         email = %user.email,
@@ -193,11 +220,18 @@ pub async fn send_transactional_mail(
     let response_body = response.text().await.unwrap_or_default();
     if !status.is_success() {
         tracing::error!(%status, response = %response_body, user_id = %user.id_string(), "Brevo rejected transactional email");
-        return Err(AppError::Internal(anyhow::anyhow!("Brevo rejected transactional email: {status}")));
+        return Err(AppError::Internal(anyhow::anyhow!(
+            "Brevo rejected transactional email: {status}"
+        )));
     }
     let message_id = serde_json::from_str::<serde_json::Value>(&response_body)
         .ok()
-        .and_then(|value| value.get("messageId").and_then(|id| id.as_str()).map(str::to_owned));
+        .and_then(|value| {
+            value
+                .get("messageId")
+                .and_then(|id| id.as_str())
+                .map(str::to_owned)
+        });
     tracing::info!(
         user_id = %user.id_string(),
         email = %user.email,
@@ -205,6 +239,29 @@ pub async fn send_transactional_mail(
         "Brevo accepted transactional email"
     );
     Ok(message_id)
+}
+
+/// Password reset is an Auth-owned email because it contains a credential
+/// recovery link. Other domains only use `send_transactional_mail` with their
+/// own opaque content.
+pub async fn send_password_reset_email(
+    state: &AppState,
+    user: &User,
+    url: &str,
+    ttl_minutes: i64,
+) -> AppResult<Option<String>> {
+    let headline = "Atur ulang password akunmu";
+    let message = format!(
+        "Halo <strong>{}</strong>,<br /><br />Kami menerima permintaan untuk mengatur ulang password akunmu. Tautan ini berlaku <strong>{} menit</strong> dan hanya dapat digunakan sekali. Jika kamu tidak memintanya, abaikan email ini.",
+        html_escape(&user.name),
+        ttl_minutes,
+    );
+    let html = stuff8_email_shell(
+        headline,
+        &message,
+        &stuff8_cta_button(url, "Atur ulang password", url),
+    );
+    send_transactional_mail(state, user, headline, &html).await
 }
 
 pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> {
@@ -215,13 +272,29 @@ pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> 
 }
 
 pub async fn verify(state: &AppState, token: &str) -> AppResult<()> {
-    let Some((id, secret)) = token.split_once('.') else { return Err(AppError::BadRequest("Invalid verification link".into())); };
-    let record = verifications(state).find_one(doc! { "id": id, "usedAt": null }, None).await?
-        .ok_or_else(|| AppError::BadRequest("This verification link is invalid or was already used".into()))?;
-    if record.expires_at.to_chrono() < chrono::Utc::now() || !password::verify_password(secret, &record.token_hash) {
-        return Err(AppError::BadRequest("This verification link has expired. Request a new email.".into()));
+    let Some((id, secret)) = token.split_once('.') else {
+        return Err(AppError::BadRequest("Invalid verification link".into()));
+    };
+    let record = verifications(state)
+        .find_one(doc! { "id": id, "usedAt": null }, None)
+        .await?
+        .ok_or_else(|| {
+            AppError::BadRequest("This verification link is invalid or was already used".into())
+        })?;
+    if record.expires_at.to_chrono() < chrono::Utc::now()
+        || !password::verify_password(secret, &record.token_hash)
+    {
+        return Err(AppError::BadRequest(
+            "This verification link has expired. Request a new email.".into(),
+        ));
     }
     crate::user_repo::mark_email_verified(state, &record.user_id).await?;
-    verifications(state).update_one(doc! { "id": id }, doc! { "$set": { "usedAt": DateTime::now() } }, None).await?;
+    verifications(state)
+        .update_one(
+            doc! { "id": id },
+            doc! { "$set": { "usedAt": DateTime::now() } },
+            None,
+        )
+        .await?;
     Ok(())
 }

@@ -123,6 +123,20 @@ pub struct VerifyPasswordResponse {
     pub valid: bool,
 }
 
+/// Email is deliberately the only field accepted by the request endpoint.
+/// Its response is always generic so it cannot reveal account existence.
+#[derive(Debug, Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordResetConfirmRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
 /// Identity fields belong to Auth. The authenticated subject is the only
 /// target; callers never supply an arbitrary user id.
 #[derive(Debug, Deserialize)]

@@ -179,7 +179,27 @@ creates an in-app notification).
   - 400 → `VALIDATION_ERROR` for blank/weak params
   - 400 → `INVALID_ARGUMENT` `"Current password is incorrect"`
   - 401 when unauthenticated
-  - 404 → `RESOURCE_NOT_FOUND` `"User not found: <id>"`
+- 404 → `RESOURCE_NOT_FOUND` `"User not found: <id>"`
+
+### POST /api/auth/forgot-password
+- **Purpose:** start a password reset. The response is intentionally identical
+  for known and unknown addresses so it cannot be used to enumerate accounts.
+- **Auth required:** no.
+- **Body:** `{ "email": "alice@example.com" }`.
+- **Success 202:** `{ "accepted": true, "message": "…" }`. If mail is
+  configured and the account exists, Auth sends a single-use reset link to
+  `{public-origin}/reset-password?token=<recordId>.<secret>`.
+- **Notes:** returns 202 even if the address is unknown or mail delivery is not
+  configured. The browser must never infer account existence from this route.
+
+### POST /api/auth/reset-password
+- **Purpose:** complete password recovery with the one-time email token.
+- **Auth required:** no — the token proves mailbox control.
+- **Body:** `{ "token": "<recordId>.<secret>", "newPassword": "…" }`.
+- **Success 204:** no body. Every previous login session is revoked.
+- **Errors:** 400 for an expired, used, malformed, or invalid token; 400 for a
+  blank/weak password (minimum 8 characters). Tokens expire after
+  `PASSWORD_RESET_TTL_MINUTES` (60 by default).
 
 ### POST /api/auth/verify-password
 - **Purpose:** Verify the authenticated user's password without changing

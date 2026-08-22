@@ -79,10 +79,7 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/resend-verification",
             post(handlers::auth::resend_verification),
         )
-        .route(
-            "/auth/mail",
-            post(handlers::auth::send_mail),
-        )
+        .route("/auth/mail", post(handlers::auth::send_mail))
         .route(
             "/auth/register-with-profile",
             post(handlers::auth::register_with_profile),
@@ -95,6 +92,11 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/verify-password",
             post(handlers::auth::verify_password),
         )
+        .route(
+            "/auth/forgot-password",
+            post(handlers::auth::forgot_password),
+        )
+        .route("/auth/reset-password", post(handlers::auth::reset_password))
         .route("/auth/me", put(handlers::auth::update_identity))
         .layer(GovernorLayer {
             config: auth_governor_config,
@@ -109,21 +111,12 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/verification-status",
             get(handlers::auth::verification_status),
         )
-        .route(
-            "/auth/access-rights",
-            get(handlers::auth::access_rights),
-        )
+        .route("/auth/access-rights", get(handlers::auth::access_rights))
         .route("/auth/session", get(handlers::auth::session_identity))
         // Single-session status: polled by the estate gateway per protected
         // request and by frontends to detect a superseded login.
-        .route(
-            "/auth/session-status",
-            get(handlers::auth::session_status),
-        )
-        .route(
-            "/auth/logout",
-            post(handlers::auth::logout),
-        )
+        .route("/auth/session-status", get(handlers::auth::session_status))
+        .route("/auth/logout", post(handlers::auth::logout))
         .route(
             "/auth/users/check-existence",
             post(handlers::auth::check_existence),

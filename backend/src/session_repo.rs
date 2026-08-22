@@ -1,11 +1,7 @@
 use bson::{doc, oid::ObjectId};
 use mongodb::{options::IndexOptions, Collection, IndexModel};
 
-use crate::{
-    error::AppError,
-    models::session::Session,
-    state::AppState,
-};
+use crate::{error::AppError, models::session::Session, state::AppState};
 
 fn sessions(state: &AppState) -> Collection<Session> {
     state.db.collection("sessions")
@@ -17,16 +13,18 @@ fn sessions(state: &AppState) -> Collection<Session> {
 pub async fn ensure_indexes(state: &AppState) -> Result<(), AppError> {
     let col = sessions(state);
     col.create_index(
-        IndexModel::builder()
-            .keys(doc! { "userId": 1 })
-            .build(),
+        IndexModel::builder().keys(doc! { "userId": 1 }).build(),
         None,
     )
     .await?;
     col.create_index(
         IndexModel::builder()
             .keys(doc! { "expiresAt": 1 })
-            .options(IndexOptions::builder().expire_after(Some(std::time::Duration::from_secs(0))).build())
+            .options(
+                IndexOptions::builder()
+                    .expire_after(Some(std::time::Duration::from_secs(0)))
+                    .build(),
+            )
             .build(),
         None,
     )
@@ -41,8 +39,9 @@ pub async fn create_session(
     user_id: &str,
     device: Option<&str>,
 ) -> Result<Session, AppError> {
-    let oid = ObjectId::parse_str(user_id)
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("invalid user id for session: {user_id}")))?;
+    let oid = ObjectId::parse_str(user_id).map_err(|_| {
+        AppError::Internal(anyhow::anyhow!("invalid user id for session: {user_id}"))
+    })?;
 
     // Revoke all prior sessions first — one active session per account.
     sessions(state)
@@ -61,11 +60,13 @@ pub async fn create_session(
         device: device.map(str::to_string),
     };
     let result = sessions(state).insert_one(&session, None).await?;
-    let id = result
-        .inserted_id
-        .as_object_id()
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("session insert did not return an ObjectId")))?;
-    Ok(Session { id: Some(id), ..session })
+    let id = result.inserted_id.as_object_id().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("session insert did not return an ObjectId"))
+    })?;
+    Ok(Session {
+        id: Some(id),
+        ..session
+    })
 }
 
 /// Whether the user already holds an active (unexpired) session. Login uses
@@ -99,6 +100,19 @@ pub async fn revoke_session(state: &AppState, sid: &str) -> Result<bool, AppErro
     let Ok(oid) = ObjectId::parse_str(sid) else {
         return Ok(false);
     };
-    let result = sessions(state).delete_one(doc! { "_id": oid }, None).await?;
+    let result = sessions(state)
+        .delete_one(doc! { "_id": oid }, None)
+        .await?;
     Ok(result.deleted_count > 0)
+}
+
+/// Revoke every session after a password reset. This is intentionally broader
+/// than logout: anyone holding an older JWT must authenticate again.
+pub async fn revoke_all_for_user(state: &AppState, user_id: &str) -> Result<(), AppError> {
+    let oid = ObjectId::parse_str(user_id)
+        .map_err(|_| AppError::BadRequest("Invalid user id for session revocation".into()))?;
+    sessions(state)
+        .delete_many(doc! { "userId": oid }, None)
+        .await?;
+    Ok(())
 }

@@ -54,46 +54,38 @@ the binary, so read this before deploying or writing consumers.
   legacy-contract quirk; posting JSON silently yields an empty-parameter
   validation error. Target user is always the JWT subject — the old contract
   accepted an arbitrary `userId` with no auth, which is a fixed CVE-class bug.
+- **Forgot-password never confirms an account exists.** `POST
+  /api/auth/forgot-password` always returns 202. A real reset link is sent
+  only when the address exists *and* Brevo plus the public origin are
+  configured. Do not make a frontend branch on its response body.
+- **Reset tokens are one-time, bcrypt-hashed, and short-lived.** The URL is
+  `{origin}/reset-password?token=<recordId>.<secret>`; the secret is never
+  stored plaintext. A new request invalidates a previous unused link. Reset
+  success revokes every active session, so all devices must sign in again.
 - **`verify-password` exists specifically so a sensitive-action confirmation
   (e.g. deleting an account) never re-posts the real password** through a
   mutating change-password call. It verifies only.
 - **Rate limits are per source IP and split in two buckets.**
   Auth routes (login/register/verify-email/resend/mail/change-password/
-  verify-password/me): burst 5, refill 1 per 10 s. Everything else: burst
+  verify-password/forgot-password/reset-password/me): burst 5, refill 1 per 10 s. Everything else: burst
   120, refill 1 per 1 s. `verification-status` deliberately sits in the
   general bucket so the shared frontend layout poll doesn't consume the
   credential-stuffing budget. Tune via `RATE_LIMIT_AUTH_BURST` /
   `RATE_LIMIT_AUTH_REPLENISH_SECS` / `RATE_LIMIT_GENERAL_BURST` /
   `RATE_LIMIT_GENERAL_REPLENISH_SECS`. The keyed store is swept every 60 s.
-- **Avatar/cover uploads are re-encoded, not stored as-sent.** Input is
-  multipart `file` with `Content-Type: image/*`; any image is decoded and
-  re-encoded to lossy WebP (quality 80). A 10 MB body cap bounds the raw
-  upload and a 30-megapixel cap (checked from the format header *before*
-  decode) bounds decompression bombs. Auth owns only avatar/cover uploads —
-  other asset types (course covers, post images) belong to lms-backend and are
-  rejected here.
-- **Storage is local disk by default; S3 is opt-in.** `STORAGE_BACKEND=local`
-  writes under `STORAGE_LOCAL_PATH` (`./storage`). Set `STORAGE_BACKEND=s3`
-  only with all of `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`,
-  `S3_SECRET_KEY` set (boot fails otherwise); `S3_REGION` defaults to
-  `us-east-1`. The S3 client uses `force_path_style=true` because MinIO does
-  not support virtual-hosted buckets. The bucket is ensured once at startup.
-  `avatarUrl`/`coverPhotoUrl` point at `{API_BASE_URL}/files/view/{file_id}`,
-  so **`API_BASE_URL` must be externally reachable** for avatars to render.
 - **MongoDB URI must include a database name** (e.g.
   `mongodb://localhost:27017/rwid_community`); the default database is
   `rwid_community`. Collections used: `users`, `email_verifications`,
-  `files`. Timestamps stored via `bson::DateTime` — do not write raw
+  `password_resets`, and `sessions`. Timestamps stored via `bson::DateTime` — do not write raw
   `chrono` timestamps through `$set` updates or deserialization breaks.
 - **Public identity lookups (`/auth/users/{id}`, `/auth/users/username/{u}`,
-  `/files/{id}`, `/files/view/{id}`, `/health`,
+  `/health`,
   `/auth/users/check-existence`) are unauthenticated** by design — siblings
   hydrate profile rows before any user has presented a token. Malformed
   ObjectIds return 404, not 400.
 - **401 vs 403 semantics.** Missing/invalid/expired bearer token → 401 with
   `{"error":"Unauthorized",...}`. A *valid* token with insufficient role →
-  403 `ACCESS_DENIED`. Role-gated endpoints: uploads + file delete require
-  `OWNER|MENTOR|MEMBER`; account deactivation requires `OWNER` only (roles
+  403 `ACCESS_DENIED`. Account deactivation requires `OWNER` only (roles
   compared case-insensitively against the JWT `role` claim).
 - **Security headers are always applied** (`x-content-type-options: nosniff`,
   `x-frame-options: DENY`, `referrer-policy: no-referrer`, plus

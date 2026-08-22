@@ -49,8 +49,15 @@ pub fn emit(config: AppConfig, user: &User) {
             // Service token: no session binding (empty sid). Sinks that
             // validate estate tokens accept it; single-session checks only
             // apply to user bearer tokens.
-            jwt::generate_token(&config.jwt_secret, SERVICE_SUB, "system", "service", "", 60_000)
-                .ok()
+            jwt::generate_token(
+                &config.jwt_secret,
+                SERVICE_SUB,
+                "system",
+                "service",
+                "",
+                60_000,
+            )
+            .ok()
         });
     let user_id = user.id_string();
     let username = user.username.clone();
@@ -72,7 +79,9 @@ pub fn emit(config: AppConfig, user: &User) {
         let result = tokio::time::timeout(EMIT_TIMEOUT, post_event(&url, &token, &event)).await;
         match result {
             Ok(Ok(_)) => tracing::debug!(url = %url, user = %user_id, "signup event delivered"),
-            Ok(Err(error)) => tracing::warn!(url = %url, user = %user_id, %error, "signup event failed"),
+            Ok(Err(error)) => {
+                tracing::warn!(url = %url, user = %user_id, %error, "signup event failed")
+            }
             Err(_) => tracing::warn!(url = %url, user = %user_id, "signup event timed out"),
         }
     });

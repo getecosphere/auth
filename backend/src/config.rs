@@ -37,6 +37,9 @@ pub struct AppConfig {
     pub rate_limit_auth_replenish_secs: u64,
     pub email_verification_required: bool,
     pub email_verification_ttl_hours: i64,
+    /// Lifetime of the single-use password reset link. The public origin is
+    /// shared with email verification links because both land on auth-ui.
+    pub password_reset_ttl_minutes: i64,
     pub brevo_api_key: String,
     pub mail_from_email: String,
     pub mail_from_name: String,
@@ -140,7 +143,14 @@ impl AppConfig {
                 .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(true),
             email_verification_ttl_hours: env::var("EMAIL_VERIFICATION_TTL_HOURS")
-                .ok().and_then(|v| v.parse().ok()).unwrap_or(24),
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(24),
+            password_reset_ttl_minutes: env::var("PASSWORD_RESET_TTL_MINUTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .filter(|value| *value >= 5 && *value <= 1_440)
+                .unwrap_or(60),
             brevo_api_key: env::var("BREVO_API_KEY").unwrap_or_default(),
             mail_from_email: env::var("MAIL_FROM_EMAIL").unwrap_or_default(),
             mail_from_name: env::var("MAIL_FROM_NAME").unwrap_or_else(|_| "Auth".to_string()),

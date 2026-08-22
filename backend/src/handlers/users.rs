@@ -1,4 +1,7 @@
-use axum::{extract::{Path, State}, http::StatusCode};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+};
 
 use crate::{
     auth_extractor::AuthUser,
