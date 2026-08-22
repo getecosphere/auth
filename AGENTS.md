@@ -41,6 +41,25 @@ Forgot-password and reset-password are public routes. The former always
 returns 202; never tell users whether an email exists. Password recovery is an
 email credential flow, and resets revoke all active sessions.
 
+### Password-recovery delivery
+
+Auth selects delivery in this order:
+
+1. Estate-owned `BREVO_API_KEY` plus `MAIL_FROM_EMAIL` — use this when an
+   estate explicitly supplies its own Brevo account; it always takes priority.
+2. The short-lived `EMAIL_RELAY_URL` plus `EMAIL_RELAY_TOKEN` injected by
+   `eco serve` — Eco scopes this capability to one active temporary hostname,
+   accepts only `/reset-password` links for that hostname, and applies a small
+   recovery-only rate budget. It is **not** a generic send-email credential.
+3. No delivery configuration — the endpoint still returns its generic 202 to
+   prevent account enumeration, but no token/mail is created.
+
+Never hand-write relay values in `ecompose.yml`, source, or a permanent
+production `.env`. `eco serve` supplies them transiently; deployed estates
+continue to use their configured provider credentials. Email verification and
+generic transactional mail remain estate-provider features — the platform
+relay is deliberately limited to password recovery.
+
 ## Ownership
 
 Auth owns credentials, identity (`name`, username, email, role), JWTs and

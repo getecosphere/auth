@@ -43,6 +43,11 @@ pub struct AppConfig {
     pub brevo_api_key: String,
     pub mail_from_email: String,
     pub mail_from_name: String,
+    /// Short-lived, hostname-scoped delivery capability injected by
+    /// `eco serve`. It is a platform fallback for password recovery only;
+    /// estate-owned Brevo credentials always take precedence.
+    pub email_relay_url: String,
+    pub email_relay_token: String,
     pub auth_public_url: String,
     /// Default role assigned to new accounts when the request does not carry
     /// one. Declared by the estate in ecompose.yml's `auth.roles` block (Eco
@@ -154,6 +159,8 @@ impl AppConfig {
             brevo_api_key: env::var("BREVO_API_KEY").unwrap_or_default(),
             mail_from_email: env::var("MAIL_FROM_EMAIL").unwrap_or_default(),
             mail_from_name: env::var("MAIL_FROM_NAME").unwrap_or_else(|_| "Auth".to_string()),
+            email_relay_url: env::var("EMAIL_RELAY_URL").unwrap_or_default(),
+            email_relay_token: env::var("EMAIL_RELAY_TOKEN").unwrap_or_default(),
             // Verification links belong to the public application, not the
             // Auth API. Prefer an explicit URL; otherwise Eco's generated
             // first CORS origin is the estate frontend in both dev and prod.

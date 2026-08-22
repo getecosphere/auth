@@ -13,7 +13,9 @@ bearer token, or send a transactional email, this is the domain.
 - **Owns:** accounts, bcrypt password hashes, JWTs, email-ownership
   verification records, password-reset records, the `users`,
   `email_verifications`, `password_resets`, and `sessions` collections, and
-  Brevo mail-provider credentials.
+  password-recovery delivery policy. An estate may own its Brevo credentials;
+  an active `eco serve` lease may instead use Eco's tightly scoped recovery
+  relay without receiving a provider key.
 - **Never owns:** profile content fields or avatars (bio, avatar, headline,
   and other person-facing data belong to `profile` + `storage`), other
   domains' email templates/business data,
@@ -49,6 +51,17 @@ curl -s http://localhost:8080/api/auth/session \
   -H "Authorization: Bearer <jwt>"
 # 200 -> {"id":"...","name":"Alice","username":"alice","email":"...","emailVerified":false,"role":"member","permissions":[],"createdAt":"...","updatedAt":"..."}
 ```
+
+## Password recovery delivery
+
+`POST /api/auth/forgot-password` always returns the same 202 response. For a
+known account, Auth prefers estate-owned `BREVO_API_KEY` + `MAIL_FROM_EMAIL`.
+When those are absent during `eco serve`, Eco injects a temporary
+`EMAIL_RELAY_URL` + `EMAIL_RELAY_TOKEN`: it can deliver only Auth's reset
+template to the live Serve hostname and expires with that lease. It is not a
+generic outbound-email service and must never be copied into an estate's
+manifest or permanent environment. If neither route is available, Auth keeps
+the generic 202 response and creates no recovery token.
 
 ## Docs index
 

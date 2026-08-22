@@ -56,8 +56,9 @@ the binary, so read this before deploying or writing consumers.
   accepted an arbitrary `userId` with no auth, which is a fixed CVE-class bug.
 - **Forgot-password never confirms an account exists.** `POST
   /api/auth/forgot-password` always returns 202. A real reset link is sent
-  only when the address exists *and* Brevo plus the public origin are
-  configured. Do not make a frontend branch on its response body.
+  only when the address exists, a public origin is known, and either the
+  estate's Brevo sender is configured or an active `eco serve` recovery relay
+  capability was injected. Do not make a frontend branch on its response body.
 - **Reset tokens are one-time, bcrypt-hashed, and short-lived.** The URL is
   `{origin}/reset-password?token=<recordId>.<secret>`; the secret is never
   stored plaintext. A new request invalidates a previous unused link. Reset

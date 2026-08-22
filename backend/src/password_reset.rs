@@ -39,12 +39,13 @@ pub async fn ensure_indexes(state: &AppState) -> AppResult<()> {
 
 /// Creates a new reset link and invalidates any older unused link for this
 /// account. Delivery is handled by Auth because it owns account email and the
-/// mail-provider credentials.
+/// mail delivery configuration.
 pub async fn issue(state: &AppState, user: &User) -> AppResult<()> {
-    if state.config.brevo_api_key.is_empty()
-        || state.config.mail_from_email.is_empty()
-        || state.config.auth_public_url.trim().is_empty()
-    {
+    let estate_mail =
+        !state.config.brevo_api_key.is_empty() && !state.config.mail_from_email.is_empty();
+    let platform_relay =
+        !state.config.email_relay_url.is_empty() && !state.config.email_relay_token.is_empty();
+    if (!estate_mail && !platform_relay) || state.config.auth_public_url.trim().is_empty() {
         tracing::warn!(user_id = %user.id_string(), "password reset requested but email delivery is not configured");
         return Ok(());
     }

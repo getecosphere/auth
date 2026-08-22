@@ -186,9 +186,11 @@ creates an in-app notification).
   for known and unknown addresses so it cannot be used to enumerate accounts.
 - **Auth required:** no.
 - **Body:** `{ "email": "alice@example.com" }`.
-- **Success 202:** `{ "accepted": true, "message": "…" }`. If mail is
+- **Success 202:** `{ "accepted": true, "message": "…" }`. If delivery is
   configured and the account exists, Auth sends a single-use reset link to
-  `{public-origin}/reset-password?token=<recordId>.<secret>`.
+  `{public-origin}/reset-password?token=<recordId>.<secret>`. Estate-owned
+  `BREVO_API_KEY` + `MAIL_FROM_EMAIL` take priority; an active `eco serve`
+  hostname may use Eco's scoped password-recovery relay instead.
 - **Notes:** returns 202 even if the address is unknown or mail delivery is not
   configured. The browser must never infer account existence from this route.
 

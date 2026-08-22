@@ -1,5 +1,14 @@
 # auth changelog
 
+## 3.3.0 (2026-08-23)
+- Password recovery can now use Eco's platform relay during an active
+  `eco serve` session when an estate has not supplied its own Brevo sender.
+  The relay capability is temporary and hostname-scoped; it accepts only
+  Auth's reset link and is rate-limited. Estate-owned `BREVO_API_KEY` and
+  `MAIL_FROM_EMAIL` remain the first-choice override.
+- Added optional `EMAIL_RELAY_URL` and secret `EMAIL_RELAY_TOKEN` contract
+  fields. They are Eco-managed runtime values, never manifest values.
+
 ## 3.2.0 (2026-08-22)
 - Added secure password recovery: `POST /api/auth/forgot-password` always
   returns a generic 202, and `POST /api/auth/reset-password` accepts a

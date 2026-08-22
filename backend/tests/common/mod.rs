@@ -66,6 +66,8 @@ pub async fn spawn() -> TestApp {
         brevo_api_key: String::new(),
         mail_from_email: String::new(),
         mail_from_name: "Test".to_string(),
+        email_relay_url: String::new(),
+        email_relay_token: String::new(),
         auth_public_url: "http://placeholder/api".to_string(),
         default_role: "member".to_string(),
         allowed_roles: Vec::new(),

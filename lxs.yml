@@ -1,6 +1,6 @@
 name: auth
 domain: auth
-version: 3.1.0
+version: 3.3.0
 publisher: stuff8
 status: unverified
 license: mit
@@ -105,6 +105,16 @@ contract:
         default: "Auth"
         group: email
         description: "Sender display name for transactional mail"
+      EMAIL_RELAY_URL:
+        type: url
+        group: email
+        managed: eco-serve-email-relay
+        description: "Eco Serve password-recovery relay endpoint; only injected for an active temporary hostname"
+      EMAIL_RELAY_TOKEN:
+        type: secret
+        group: email
+        managed: eco-serve-email-relay
+        description: "Hostname-scoped capability for the Eco Serve password-recovery relay"
       ECO_AUTH_DEFAULT_ROLE:
         type: string
         managed: identity-roles
@@ -148,6 +158,8 @@ contract:
       - BREVO_API_KEY
       - MAIL_FROM_EMAIL
       - MAIL_FROM_NAME
+      - EMAIL_RELAY_URL
+      - EMAIL_RELAY_TOKEN
       - SIGNUP_EVENT_URL
       - SIGNUP_EVENT_TOKEN
       - SESSION_REQUIRED

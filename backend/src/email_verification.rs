@@ -250,18 +250,49 @@ pub async fn send_password_reset_email(
     url: &str,
     ttl_minutes: i64,
 ) -> AppResult<Option<String>> {
-    let headline = "Atur ulang password akunmu";
-    let message = format!(
-        "Halo <strong>{}</strong>,<br /><br />Kami menerima permintaan untuk mengatur ulang password akunmu. Tautan ini berlaku <strong>{} menit</strong> dan hanya dapat digunakan sekali. Jika kamu tidak memintanya, abaikan email ini.",
-        html_escape(&user.name),
-        ttl_minutes,
-    );
-    let html = stuff8_email_shell(
-        headline,
-        &message,
-        &stuff8_cta_button(url, "Atur ulang password", url),
-    );
-    send_transactional_mail(state, user, headline, &html).await
+    // An estate's own provider configuration always wins. The platform relay
+    // is intentionally a recovery-only fallback for a temporary `eco serve`
+    // lease, never a general outbound-mail API.
+    if !state.config.brevo_api_key.is_empty() && !state.config.mail_from_email.is_empty() {
+        let headline = "Atur ulang password akunmu";
+        let message = format!(
+            "Halo <strong>{}</strong>,<br /><br />Kami menerima permintaan untuk mengatur ulang password akunmu. Tautan ini berlaku <strong>{} menit</strong> dan hanya dapat digunakan sekali. Jika kamu tidak memintanya, abaikan email ini.",
+            html_escape(&user.name),
+            ttl_minutes,
+        );
+        let html = stuff8_email_shell(
+            headline,
+            &message,
+            &stuff8_cta_button(url, "Atur ulang password", url),
+        );
+        return send_transactional_mail(state, user, headline, &html).await;
+    }
+
+    if state.config.email_relay_url.trim().is_empty() || state.config.email_relay_token.is_empty() {
+        tracing::warn!(user_id = %user.id_string(), "password reset requested but no direct email provider or platform relay is configured");
+        return Ok(None);
+    }
+    let response = reqwest::Client::new()
+        .post(state.config.email_relay_url.trim())
+        .bearer_auth(&state.config.email_relay_token)
+        .json(&serde_json::json!({
+            "to": &user.email,
+            "name": &user.name,
+            "reset_url": url,
+            "ttl_minutes": ttl_minutes,
+        }))
+        .send()
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        tracing::error!(%status, user_id = %user.id_string(), "platform password recovery relay rejected email");
+        return Err(AppError::Internal(anyhow::anyhow!(
+            "platform password recovery relay rejected email: {status}"
+        )));
+    }
+    tracing::info!(user_id = %user.id_string(), "platform password recovery relay accepted email");
+    Ok(None)
 }
 
 pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> {
