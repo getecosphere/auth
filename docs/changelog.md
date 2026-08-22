@@ -1,5 +1,10 @@
 # auth changelog
 
+## 3.4.1 (2026-08-23)
+- Auth's composition recipe now materializes
+  `services.auth-backend.config.EMAIL_VERIFICATION_REQUIRED: "true"` too, so
+  the service and top-level identity policy visibly agree in ecompose.yml.
+
 ## 3.4.0 (2026-08-23)
 - Email verification is now secure-by-default
   (`EMAIL_VERIFICATION_REQUIRED=true`).
