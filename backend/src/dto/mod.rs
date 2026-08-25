@@ -15,6 +15,7 @@ pub struct UserDto {
     pub email: String,
     pub email_verified: bool,
     pub role: String,
+    pub roles: Vec<String>,
     /// Access rights the user currently holds (e.g. `verified_user`). Auth
     /// reports the rights; the rules that map them to capabilities live in the
     /// composition domain.
@@ -33,6 +34,7 @@ impl From<&User> for UserDto {
             email: user.email.clone(),
             email_verified: user.email_verified_at.is_some(),
             role: user.role.clone(),
+            roles: user.effective_roles(),
             permissions: user.access_rights(),
             created_at: user.created_at.to_chrono(),
             updated_at: user.updated_at.to_chrono(),

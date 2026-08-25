@@ -54,6 +54,7 @@ pub fn emit(config: AppConfig, user: &User) {
                 SERVICE_SUB,
                 "system",
                 "service",
+                &["service".to_string()],
                 "",
                 60_000,
             )

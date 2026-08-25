@@ -505,6 +505,7 @@ async fn issue_auth_response(
         &user.id_string(),
         &user.username,
         &user.role,
+        &user.effective_roles(),
         &session.id_string(),
         state.config.jwt_expiration_ms,
     )?;

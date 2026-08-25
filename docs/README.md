@@ -8,6 +8,10 @@ verification, password recovery, password change/verify, and transactional email
 other domains. If a consumer needs to know *who* an actor is, verify a
 bearer token, or send a transactional email, this is the domain.
 
+Accounts retain a backwards-compatible primary `role` and may carry a complete
+`roles` array for multi-role authorization. JWTs carry both fields; consumers
+use `roles` when present and fall back to the primary role for older tokens.
+
 ## What it owns / never owns
 
 - **Owns:** accounts, bcrypt password hashes, JWTs, email-ownership

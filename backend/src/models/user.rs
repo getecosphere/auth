@@ -22,6 +22,10 @@ pub struct User {
     pub password_hash: String,
     pub name: String,
     pub role: String,
+    /// Additional identity roles. `role` remains the primary role for legacy
+    /// consumers; every new token also carries this complete role set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<String>,
     /// Explicit access-right grants (opaque tokens, e.g. `moderator`). Auth
     /// stores and returns these but never interprets their meaning; the
     /// business rules that decide what each grant *allows* live in the
@@ -53,5 +57,13 @@ impl User {
             rights.push("verified_user".to_string());
         }
         rights
+    }
+
+    pub fn effective_roles(&self) -> Vec<String> {
+        let mut roles = self.roles.clone();
+        if !roles.iter().any(|value| value.eq_ignore_ascii_case(&self.role)) {
+            roles.insert(0, self.role.clone());
+        }
+        roles
     }
 }

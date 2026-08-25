@@ -15,6 +15,8 @@ pub struct Claims {
     pub sub: String,
     pub username: String,
     pub role: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<String>,
     pub iat: i64,
     pub exp: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -26,6 +28,7 @@ pub fn generate_token(
     user_id: &str,
     username: &str,
     role: &str,
+    roles: &[String],
     session_id: &str,
     expiration_ms: i64,
 ) -> anyhow::Result<String> {
@@ -34,6 +37,7 @@ pub fn generate_token(
         sub: user_id.to_string(),
         username: username.to_string(),
         role: role.to_string(),
+        roles: roles.to_vec(),
         iat: now.timestamp(),
         exp: (now + chrono::Duration::milliseconds(expiration_ms)).timestamp(),
         sid: session_id.to_string(),

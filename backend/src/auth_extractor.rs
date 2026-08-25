@@ -14,6 +14,7 @@ pub struct AuthUser {
     pub user_id: String,
     pub username: String,
     pub role: String,
+    pub roles: Vec<String>,
     /// Session id (`sid` claim) when the token carries one. Empty for legacy
     /// pre-session tokens (accepted only while `SESSION_REQUIRED=false`).
     pub sid: String,
@@ -80,6 +81,7 @@ impl FromRequestParts<AppState> for AuthUser {
             user_id: claims.sub,
             username: claims.username,
             role: claims.role,
+            roles: claims.roles,
             sid: claims.sid,
         })
     }
@@ -89,8 +91,10 @@ impl AuthUser {
     /// Mirrors `@PreAuthorize("hasAnyRole(...)")`, which fails with 403 (not
     /// 401 like a missing/invalid token does).
     pub fn require_role(&self, allowed: &[&str]) -> Result<(), AppError> {
-        let role_upper = self.role.to_uppercase();
-        if allowed.iter().any(|r| r.to_uppercase() == role_upper) {
+        if allowed.iter().any(|allowed_role| {
+            self.role.eq_ignore_ascii_case(allowed_role)
+                || self.roles.iter().any(|role| role.eq_ignore_ascii_case(allowed_role))
+        }) {
             Ok(())
         } else {
             tracing::warn!(

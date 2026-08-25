@@ -1,5 +1,11 @@
 # auth changelog
 
+## 3.5.0 (2026-08-25)
+- Added backward-compatible multi-role identities. Auth keeps the legacy
+  primary `role` and now emits the complete `roles` array in user responses
+  and HS512 JWTs. Existing users with no `roles` field continue to receive
+  their primary role as the full effective set.
+
 ## 3.4.1 (2026-08-23)
 - Auth's composition recipe now materializes
   `services.auth-backend.config.EMAIL_VERIFICATION_REQUIRED: "true"` too, so

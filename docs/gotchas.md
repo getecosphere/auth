@@ -15,7 +15,9 @@ the binary, so read this before deploying or writing consumers.
   (`your-secret-key-change-in-production`, `change-this-secret`, `secret`)
   are rejected at boot, as is any empty value.
 - **JWT claim shape is a cross-service contract.** Claims are `sub`,
-  `username`, `role`, `iat`, `exp`, HS512 — lms-backend's `JwtTokenProvider`
+  `username`, legacy primary `role`, complete `roles`, `iat`, `exp`, HS512 —
+  consumers must accept missing `roles` from older tokens and treat `role` as
+  the fallback singleton set.
   parses exactly this shape. Changing it requires updating both services.
   Default lifetime 30 days (`JWT_EXPIRATION`, ms); responses carry
   `expiresIn` (seconds) so the frontend can proactively invalidate the
