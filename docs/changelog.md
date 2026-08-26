@@ -1,10 +1,13 @@
 # auth changelog
 
-## 3.6.0 (2026-08-27)
+## 3.6.1 (2026-08-27)
 - Added `POST /api/auth/admin/register`, an active-session, superadmin-only
   provisioning route. It is outside the public credential rate limiter, so an
   authorized estate can create a classroom of accounts without weakening
   login or public signup throttling.
+- Accounts created through that administrative route never receive a login
+  session during provisioning; their first student login is therefore their
+  first active device.
 
 ## 3.5.1 (2026-08-26)
 - Canonicalized new email addresses to lowercase and made legacy email lookup

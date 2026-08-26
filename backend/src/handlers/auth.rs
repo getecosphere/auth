@@ -101,7 +101,7 @@ pub async fn register(
     State(state): State<AppState>,
     Json(req): Json<RegisterQuery>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
-    register_user(&state, req).await
+    register_user(&state, req, true).await
 }
 
 /// Superadmin-only provisioning lane. It is intentionally outside the public
@@ -114,12 +114,13 @@ pub async fn admin_register(
     Json(req): Json<RegisterQuery>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
     auth.require_role(&["superadmin"])?;
-    register_user(&state, req).await
+    register_user(&state, req, false).await
 }
 
 async fn register_user(
     state: &AppState,
     req: RegisterQuery,
+    issue_session: bool,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
     require_non_blank(&[
         ("username", &req.username),
@@ -158,7 +159,7 @@ async fn register_user(
         return Err(error);
     }
     crate::signup_event::emit(state.config.clone(), &user);
-    let response = if state.config.email_verification_required {
+    let response = if state.config.email_verification_required || !issue_session {
         pending_verification_response(&user)
     } else {
         issue_auth_response(state, &user).await?
