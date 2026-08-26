@@ -391,3 +391,10 @@ administered separately:
   headers forwarded from governor.
 - **Request body cap:** 10 MB total (`RequestBodyLimitLayer`) — relevant for
   avatar/cover uploads; oversized requests are rejected with 413.
+# Administrative provisioning
+
+`POST /api/auth/admin/register` accepts the same JSON body as public
+registration, but requires a bearer token for an active `superadmin` session.
+It is intended for an estate's bulk credential workflow and is not subject to
+the public login/signup rate limiter. It must never be exposed as a public
+gateway route.

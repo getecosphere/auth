@@ -101,6 +101,26 @@ pub async fn register(
     State(state): State<AppState>,
     Json(req): Json<RegisterQuery>,
 ) -> AppResult<(StatusCode, Json<AuthResponse>)> {
+    register_user(&state, req).await
+}
+
+/// Superadmin-only provisioning lane. It is intentionally outside the public
+/// credential-stuffing limiter: an estate administrator may legitimately
+/// create a classroom of accounts in one request. The bearer token is still
+/// validated (including its active session) before this code can run.
+pub async fn admin_register(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(req): Json<RegisterQuery>,
+) -> AppResult<(StatusCode, Json<AuthResponse>)> {
+    auth.require_role(&["superadmin"])?;
+    register_user(&state, req).await
+}
+
+async fn register_user(
+    state: &AppState,
+    req: RegisterQuery,
+) -> AppResult<(StatusCode, Json<AuthResponse>)> {
     require_non_blank(&[
         ("username", &req.username),
         ("email", &req.email),
@@ -110,14 +130,14 @@ pub async fn register(
     require_password_strength(&req.password)?;
     email_verification::ensure_delivery_configured(&state.config)?;
 
-    if user_repo::find_by_username(&state, &req.username)
+    if user_repo::find_by_username(state, &req.username)
         .await?
         .is_some()
     {
         tracing::warn!(username = %req.username, "register rejected: username already taken");
         return Err(AppError::Conflict("Username is already taken".to_string()));
     }
-    if user_repo::find_by_email(&state, &req.email)
+    if user_repo::find_by_email(state, &req.email)
         .await?
         .is_some()
     {
@@ -127,21 +147,21 @@ pub async fn register(
         ));
     }
 
-    let role = resolve_registration_role(&state, req.role.as_deref())?;
+    let role = resolve_registration_role(state, req.role.as_deref())?;
     let hashed = password::hash_password(&req.password)?;
-    let user = user_repo::insert_user(&state, &req.username, &req.email, &hashed, &req.name, &role)
+    let user = user_repo::insert_user(state, &req.username, &req.email, &hashed, &req.name, &role)
         .await?;
 
-    if let Err(error) = email_verification::send_for_user(&state, &user).await {
-        let _ = email_verification::discard_for_user(&state, &user.id_string()).await;
-        let _ = user_repo::discard_unverified_new_user(&state, &user.id_string()).await;
+    if let Err(error) = email_verification::send_for_user(state, &user).await {
+        let _ = email_verification::discard_for_user(state, &user.id_string()).await;
+        let _ = user_repo::discard_unverified_new_user(state, &user.id_string()).await;
         return Err(error);
     }
     crate::signup_event::emit(state.config.clone(), &user);
     let response = if state.config.email_verification_required {
         pending_verification_response(&user)
     } else {
-        issue_auth_response(&state, &user).await?
+        issue_auth_response(state, &user).await?
     };
     Ok((StatusCode::CREATED, Json(response)))
 }

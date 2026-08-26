@@ -135,8 +135,17 @@ pub fn build_router(state: AppState) -> Router {
             config: general_governor_config,
         });
 
+    // This lane is protected by a validated, active superadmin session. It
+    // deliberately does not consume the public IP-based credential budget:
+    // provisioning a class is a legitimate single administrative operation.
+    let privileged_routes = Router::new().route(
+        "/auth/admin/register",
+        post(handlers::auth::admin_register),
+    );
+
     let api_routes = credential_routes
         .merge(general_routes)
+        .merge(privileged_routes)
         .layer(
             ServiceBuilder::new()
                 .layer(RequestBodyLimitLayer::new(MAX_BODY_BYTES))
