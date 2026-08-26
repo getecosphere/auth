@@ -1,5 +1,10 @@
 # auth changelog
 
+## 3.5.1 (2026-08-26)
+- Canonicalized new email addresses to lowercase and made legacy email lookup
+  case-insensitive. Sign-in and password recovery now work regardless of the
+  casing a person uses in their email address.
+
 ## 3.5.0 (2026-08-25)
 - Added backward-compatible multi-role identities. Auth keeps the legacy
   primary `role` and now emits the complete `roles` array in user responses

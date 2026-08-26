@@ -7,6 +7,13 @@ fn users(state: &AppState) -> Collection<User> {
     state.db.collection("users")
 }
 
+/// Email addresses are identifiers, not display text. Store new values in a
+/// canonical form and compare existing legacy records case-insensitively so a
+/// browser's lowercase normalization cannot make recovery or sign-in fail.
+fn normalize_email(email: &str) -> String {
+    email.trim().to_lowercase()
+}
+
 pub async fn find_by_username(state: &AppState, username: &str) -> Result<Option<User>, AppError> {
     Ok(users(state)
         .find_one(doc! { "username": username, "deletedAt": null }, None)
@@ -14,8 +21,15 @@ pub async fn find_by_username(state: &AppState, username: &str) -> Result<Option
 }
 
 pub async fn find_by_email(state: &AppState, email: &str) -> Result<Option<User>, AppError> {
+    let email = normalize_email(email);
     Ok(users(state)
-        .find_one(doc! { "email": email, "deletedAt": null }, None)
+        .find_one(
+            doc! {
+                "deletedAt": null,
+                "$expr": { "$eq": [{ "$toLower": "$email" }, email] },
+            },
+            None,
+        )
         .await?)
 }
 
@@ -52,7 +66,7 @@ pub async fn insert_user(
     let user = User {
         id: None,
         username: username.to_string(),
-        email: email.to_string(),
+        email: normalize_email(email),
         password_hash: password_hash.to_string(),
         name: name.to_string(),
         role: role.to_string(),
