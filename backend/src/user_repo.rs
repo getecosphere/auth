@@ -129,6 +129,21 @@ pub async fn update_name(state: &AppState, id: &str, name: &str) -> Result<(), A
     Ok(())
 }
 
+/// Replaces the identity roles after an estate superadmin has approved a
+/// request. Tokens are revoked by the caller so the next login carries these
+/// fresh claims.
+pub async fn replace_roles(state: &AppState, id: &str, roles: &[String]) -> Result<(), AppError> {
+    let oid = ObjectId::parse_str(id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
+    let primary = roles.first().ok_or_else(|| AppError::BadRequest("At least one role is required".into()))?;
+    users(state).update_one(
+        doc! { "_id": oid, "deletedAt": null },
+        doc! { "$set": { "role": primary, "roles": roles, "updatedAt": bson::DateTime::now() } },
+        None,
+    ).await?;
+    Ok(())
+}
+
 pub async fn soft_delete(state: &AppState, id: &str) -> Result<(), AppError> {
     let oid = ObjectId::parse_str(id)
         .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;

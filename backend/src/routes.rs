@@ -141,6 +141,9 @@ pub fn build_router(state: AppState) -> Router {
     let privileged_routes = Router::new().route(
         "/auth/admin/register",
         post(handlers::auth::admin_register),
+    ).route(
+        "/auth/admin/users/:id/roles",
+        put(handlers::auth::admin_update_roles),
     );
 
     let api_routes = credential_routes

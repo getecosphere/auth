@@ -398,3 +398,7 @@ registration, but requires a bearer token for an active `superadmin` session.
 It is intended for an estate's bulk credential workflow and is not subject to
 the public login/signup rate limiter. It must never be exposed as a public
 gateway route.
+
+`PUT /api/auth/admin/users/:id/roles` requires an active `superadmin` bearer
+token and accepts `{ "roles": ["gurubk"] }`. It revokes the target's existing
+sessions so newly-issued JWT claims always match the approved role.

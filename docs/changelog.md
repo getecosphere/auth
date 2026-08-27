@@ -1,5 +1,11 @@
 # auth changelog
 
+## 3.7.0 (2026-08-27)
+- Added superadmin-only role assignment at
+  `PUT /api/auth/admin/users/:id/roles`. Auth updates the canonical claims and
+  revokes existing sessions so the approved account must sign in again with
+  its new role.
+
 ## 3.6.1 (2026-08-27)
 - Added `POST /api/auth/admin/register`, an active-session, superadmin-only
   provisioning route. It is outside the public credential rate limiter, so an
