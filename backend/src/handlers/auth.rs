@@ -142,6 +142,16 @@ pub async fn admin_update_roles(
     Ok(Json(UserDto::from(&user)))
 }
 
+pub async fn admin_add_roles(State(state): State<AppState>, auth: AuthUser, Path(user_id): Path<String>, Json(req): Json<AdminRolesRequest>) -> AppResult<Json<UserDto>> {
+    auth.require_role(&["superadmin"])?;
+    let roles: Vec<String> = req.roles.into_iter().map(|r| r.trim().to_lowercase()).filter(|r| !r.is_empty()).collect();
+    if roles.is_empty() || roles.iter().any(|role| !state.config.allowed_roles.is_empty() && !state.config.allowed_roles.iter().any(|allowed| allowed == role)) { return Err(AppError::BadRequest("Role tidak diizinkan untuk estate ini".into())); }
+    user_repo::add_roles(&state, &user_id, &roles).await?;
+    crate::session_repo::revoke_all_for_user(&state, &user_id).await?;
+    let user = user_repo::find_by_id(&state, &user_id).await?.ok_or_else(|| AppError::NotFound("User tidak ditemukan".into()))?;
+    Ok(Json(UserDto::from(&user)))
+}
+
 async fn register_user(
     state: &AppState,
     req: RegisterQuery,

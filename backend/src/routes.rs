@@ -144,6 +144,9 @@ pub fn build_router(state: AppState) -> Router {
     ).route(
         "/auth/admin/users/:id/roles",
         put(handlers::auth::admin_update_roles),
+    ).route(
+        "/auth/admin/users/:id/roles/add",
+        put(handlers::auth::admin_add_roles),
     );
 
     let api_routes = credential_routes

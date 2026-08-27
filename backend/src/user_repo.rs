@@ -144,6 +144,18 @@ pub async fn replace_roles(state: &AppState, id: &str, roles: &[String]) -> Resu
     Ok(())
 }
 
+/// Adds an approved role without removing any role the account already has.
+pub async fn add_roles(state: &AppState, id: &str, roles: &[String]) -> Result<(), AppError> {
+    let oid = ObjectId::parse_str(id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
+    users(state).update_one(
+        doc! { "_id": oid, "deletedAt": null },
+        doc! { "$addToSet": { "roles": { "$each": roles } }, "$set": { "updatedAt": bson::DateTime::now() } },
+        None,
+    ).await?;
+    Ok(())
+}
+
 pub async fn soft_delete(state: &AppState, id: &str) -> Result<(), AppError> {
     let oid = ObjectId::parse_str(id)
         .map_err(|_| AppError::BadRequest(format!("Invalid user id: {id}")))?;
