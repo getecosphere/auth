@@ -139,6 +139,18 @@ pub struct PasswordResetConfirmRequest {
     pub new_password: String,
 }
 
+/// Email is deliberately the only field accepted by the request endpoint.
+/// Its response is always generic so it cannot reveal account existence.
+#[derive(Debug, Deserialize)]
+pub struct LoginLinkRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginLinkConfirmRequest {
+    pub token: String,
+}
+
 /// Identity fields belong to Auth. The authenticated subject is the only
 /// target; callers never supply an arbitrary user id.
 #[derive(Debug, Deserialize)]

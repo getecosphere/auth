@@ -8,9 +8,9 @@ use crate::{
     auth_extractor::AuthUser,
     dto::{
         AuthResponse, ChangePasswordQuery, CheckUsernameRequest, CheckUsernameResponse,
-        EmailVerificationStatus, LoginRequest, PasswordResetConfirmRequest, PasswordResetRequest,
-        RegisterQuery, RegisterWithProfileQuery, UserDto, VerifyPasswordRequest,
-        VerifyPasswordResponse,
+        EmailVerificationStatus, LoginLinkConfirmRequest, LoginLinkRequest, LoginRequest,
+        PasswordResetConfirmRequest, PasswordResetRequest, RegisterQuery,
+        RegisterWithProfileQuery, UserDto, VerifyPasswordRequest, VerifyPasswordResponse,
     },
     email_verification,
     error::{require_non_blank, require_password_strength, AppError, AppResult},
@@ -477,6 +477,64 @@ pub async fn reset_password(
     crate::session_repo::revoke_all_for_user(&state, &user.id_string()).await?;
     tracing::info!(user_id = %user.id_string(), "password reset completed and sessions revoked");
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Starts the passwordless sign-in flow — the recovery path for a user locked
+/// out of the single active session (e.g. the old device is lost or broken).
+/// Like password recovery this never says whether the email exists; doing so
+/// would turn the endpoint into an account directory.
+pub async fn request_login_link(
+    State(state): State<AppState>,
+    Json(req): Json<LoginLinkRequest>,
+) -> AppResult<(StatusCode, Json<serde_json::Value>)> {
+    let email = req.email.trim();
+    if !email.is_empty() {
+        match user_repo::find_by_email(&state, email).await? {
+            Some(user) => {
+                if let Err(error) = crate::login_link::issue(&state, &user).await {
+                    tracing::error!(user_id = %user.id_string(), ?error, "login link delivery failed");
+                }
+            }
+            None => {
+                // Pay the bcrypt cost even for an unknown address so the
+                // observable timing stays closer to the known-account path.
+                let _ = password::hash_password("login-link-timing-padding");
+            }
+        }
+    }
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "accepted": true,
+            "message": "Jika alamat email terdaftar, kami telah mengirimkan tautan masuk."
+        })),
+    ))
+}
+
+/// Completes a passwordless sign-in. The one-time token proves mailbox
+/// control; confirming it mints a fresh session (revoking every older one) so
+/// the account can move to the current device immediately.
+pub async fn confirm_login_link(
+    State(state): State<AppState>,
+    Json(req): Json<LoginLinkConfirmRequest>,
+) -> AppResult<Json<AuthResponse>> {
+    require_non_blank(&[("token", &req.token)])?;
+    let user_id = crate::login_link::consume(&state, req.token.trim()).await?;
+    let user = user_repo::find_by_id(&state, &user_id)
+        .await?
+        .ok_or_else(|| {
+            AppError::BadRequest("Tautan masuk tidak valid atau sudah kedaluwarsa.".into())
+        })?;
+
+    // Proving mailbox control is itself proof the address is owned, so a
+    // login-link sign-in clears the verification gate instead of dead-ending
+    // an unverified account that had lost its only session.
+    if state.config.email_verification_required && user.email_verified_at.is_none() {
+        user_repo::mark_email_verified(&state, &user_id).await?;
+    }
+
+    tracing::info!(user_id = %user.id_string(), "login-link sign-in confirmed; old sessions revoked");
+    Ok(Json(issue_auth_response(&state, &user).await?))
 }
 
 pub async fn update_identity(

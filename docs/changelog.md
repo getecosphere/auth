@@ -1,5 +1,21 @@
 # auth changelog
 
+## 3.8.0 (2026-08-31)
+- **Passwordless login links — the recovery path for single-session
+  lockout.** A user blocked by `409 ALREADY_EXISTS` (an active session on a
+  lost/broken device) can now request a one-time email link and sign in on a
+  new device without changing their password.
+- New public `POST /api/auth/login-link` (generic 202, never reveals account
+  existence) and `POST /api/auth/login-link/confirm` (single-use token mints a
+  fresh session and revokes every older one). Proving mailbox control also
+  marks an unverified account's email verified.
+- Link tokens reuse the reset-token pattern: bcrypt-hashed secret stored
+  server-side, one unused link per account, TTL via new optional
+  `LOGIN_LINK_TTL_MINUTES` (default 10, bounded 5–60). Delivery reuses the
+  estate Brevo provider or the scoped `eco serve` relay.
+- Both routes sit under the auth credential rate limiter alongside login and
+  forgot-password.
+
 ## 3.7.0 (2026-08-27)
 - Added superadmin-only role assignment at
   `PUT /api/auth/admin/users/:id/roles`. Auth updates the canonical claims and

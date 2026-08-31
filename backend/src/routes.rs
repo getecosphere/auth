@@ -97,6 +97,14 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::auth::forgot_password),
         )
         .route("/auth/reset-password", post(handlers::auth::reset_password))
+        // Passwordless sign-in: the recovery path for a user locked out of
+        // the single active session. Both routes are public — the request
+        // proves mailbox control via email, the confirm mints a fresh session.
+        .route("/auth/login-link", post(handlers::auth::request_login_link))
+        .route(
+            "/auth/login-link/confirm",
+            post(handlers::auth::confirm_login_link),
+        )
         .route("/auth/me", put(handlers::auth::update_identity))
         .layer(GovernorLayer {
             config: auth_governor_config,

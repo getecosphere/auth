@@ -1,6 +1,6 @@
 name: auth
 domain: auth
-version: 3.7.0
+version: 3.8.0
 publisher: stuff8
 status: unverified
 license: mit
@@ -89,6 +89,13 @@ contract:
         max: 1440
         group: email
         description: "Minutes a one-time password reset link remains valid"
+      LOGIN_LINK_TTL_MINUTES:
+        type: int
+        default: "10"
+        min: 5
+        max: 60
+        group: email
+        description: "Minutes a one-time passwordless login link remains valid"
       EMAIL_VERIFICATION_PUBLIC_URL:
         type: url
         group: email
@@ -153,6 +160,7 @@ contract:
       - EMAIL_VERIFICATION_REQUIRED
       - EMAIL_VERIFICATION_TTL_HOURS
       - PASSWORD_RESET_TTL_MINUTES
+      - LOGIN_LINK_TTL_MINUTES
       - EMAIL_VERIFICATION_PUBLIC_URL
       - ECO_AUTH_DEFAULT_ROLE
       - ECO_AUTH_ROLES
@@ -173,6 +181,7 @@ contract:
       EMAIL_VERIFICATION_REQUIRED: "true"
       EMAIL_VERIFICATION_TTL_HOURS: "24"
       PASSWORD_RESET_TTL_MINUTES: "60"
+      LOGIN_LINK_TTL_MINUTES: "10"
       MAIL_FROM_NAME: "Auth"
       SESSION_REQUIRED: "true"
   db: mongodb@7
@@ -218,6 +227,8 @@ compose:
         - { path: /api/auth/users/check-existence, level: public }
         - { path: /api/auth/forgot-password, level: public }
         - { path: /api/auth/reset-password, level: public }
+        - { path: /api/auth/login-link, level: public }
+        - { path: /api/auth/login-link/confirm, level: public }
         - { path: /api/auth/*, level: auth, cookie: eco_token }
         - { path: /auth-api/auth/login, level: public, strip: /auth-api, rewrite: /api }
         - { path: /auth-api/auth/register, level: public, strip: /auth-api, rewrite: /api }
@@ -226,6 +237,8 @@ compose:
         - { path: /auth-api/auth/users/check-existence, level: public, strip: /auth-api, rewrite: /api }
         - { path: /auth-api/auth/forgot-password, level: public, strip: /auth-api, rewrite: /api }
         - { path: /auth-api/auth/reset-password, level: public, strip: /auth-api, rewrite: /api }
+        - { path: /auth-api/auth/login-link, level: public, strip: /auth-api, rewrite: /api }
+        - { path: /auth-api/auth/login-link/confirm, level: public, strip: /auth-api, rewrite: /api }
         - { path: /auth-api/*, level: auth, cookie: eco_token, strip: /auth-api, rewrite: /api }
   auth:
     email_verification:

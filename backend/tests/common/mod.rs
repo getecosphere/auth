@@ -63,6 +63,7 @@ pub async fn spawn() -> TestApp {
         email_verification_required: false,
         email_verification_ttl_hours: 24,
         password_reset_ttl_minutes: 60,
+        login_link_ttl_minutes: 10,
         brevo_api_key: String::new(),
         mail_from_email: String::new(),
         mail_from_name: "Test".to_string(),

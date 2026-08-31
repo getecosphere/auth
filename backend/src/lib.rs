@@ -10,6 +10,7 @@ pub mod email_verification;
 pub mod error;
 pub mod handlers;
 pub mod jwt;
+pub mod login_link;
 pub mod models;
 pub mod password;
 pub mod password_reset;
@@ -30,5 +31,6 @@ pub async fn bootstrap() -> anyhow::Result<axum::Router> {
     let state = state::AppState::new(db, config.clone());
     let _ = session_repo::ensure_indexes(&state).await;
     let _ = password_reset::ensure_indexes(&state).await;
+    let _ = login_link::ensure_indexes(&state).await;
     Ok(routes::build_router(state))
 }

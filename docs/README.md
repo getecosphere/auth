@@ -15,9 +15,10 @@ use `roles` when present and fall back to the primary role for older tokens.
 ## What it owns / never owns
 
 - **Owns:** accounts, bcrypt password hashes, JWTs, email-ownership
-  verification records, password-reset records, the `users`,
-  `email_verifications`, `password_resets`, and `sessions` collections, and
-  password-recovery delivery policy. An estate may own its Brevo credentials;
+  verification records, password-reset records, passwordless login-link
+  records, the `users`, `email_verifications`, `password_resets`,
+  `login_links`, and `sessions` collections, and password-recovery/email
+  delivery policy. An estate may own its Brevo credentials;
   an active `eco serve` lease may instead use Eco's tightly scoped recovery
   relay without receiving a provider key.
 - **Never owns:** profile content fields or avatars (bio, avatar, headline,
@@ -66,6 +67,16 @@ template to the live Serve hostname and expires with that lease. It is not a
 generic outbound-email service and must never be copied into an estate's
 manifest or permanent environment. If neither route is available, Auth keeps
 the generic 202 response and creates no recovery token.
+
+## Passwordless login links (single-session recovery)
+
+`POST /api/auth/login-link` always returns the same 202 response and never
+reveals whether an account exists. For a known account it emails a single-use
+link (same delivery hierarchy as password recovery) to
+`{public-origin}/login-link?token=<recordId>.<secret>`. `POST
+/api/auth/login-link/confirm` consumes that token, mints a fresh session and
+revokes every older one — the recovery path for a user locked out of the
+single active session. Links live `LOGIN_LINK_TTL_MINUTES` (default 10).
 
 ## Docs index
 

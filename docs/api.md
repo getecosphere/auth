@@ -203,6 +203,32 @@ creates an in-app notification).
   blank/weak password (minimum 8 characters). Tokens expire after
   `PASSWORD_RESET_TTL_MINUTES` (60 by default).
 
+### POST /api/auth/login-link
+- **Purpose:** start a passwordless sign-in — the recovery path for a user
+  locked out of the single active session (e.g. the old device is lost or
+  broken). The response is intentionally identical for known and unknown
+  addresses so it cannot be used to enumerate accounts.
+- **Auth required:** no.
+- **Body:** `{ "email": "alice@example.com" }`.
+- **Success 202:** `{ "accepted": true, "message": "…" }`. If delivery is
+  configured and the account exists, Auth sends a single-use login link to
+  `{public-origin}/login-link?token=<recordId>.<secret>`. Estate-owned
+  `BREVO_API_KEY` + `MAIL_FROM_EMAIL` take priority; an active `eco serve`
+  hostname may use Eco's scoped relay instead.
+- **Notes:** returns 202 even if the address is unknown or mail delivery is not
+  configured. Links expire after `LOGIN_LINK_TTL_MINUTES` (10 by default) and
+  only one unused link per account is alive at a time.
+
+### POST /api/auth/login-link/confirm
+- **Purpose:** complete the passwordless sign-in with the one-time email token.
+- **Auth required:** no — the token proves mailbox control.
+- **Body:** `{ "token": "<recordId>.<secret>" }`.
+- **Success 200:** `AuthResponse` (same shape as login). Confirming mints a
+  fresh session and revokes every older one, so the account moves to the
+  current device immediately. When `EMAIL_VERIFICATION_REQUIRED` is set and the
+  account was not yet verified, the mailbox proof also marks it verified.
+- **Errors:** 400 for an expired, used, malformed, or invalid token.
+
 ### POST /api/auth/verify-password
 - **Purpose:** Verify the authenticated user's password without changing
   anything. Used for sensitive-action confirmations (e.g. deleting a member
@@ -381,7 +407,8 @@ administered separately:
 
 - **Auth-senstitive routes** (login, register, register-with-profile,
   verify-email, resend-verification, mail, change-password, verify-password,
-  me): burst 5, refill 1 token / 10 s — `RATE_LIMIT_AUTH_BURST`,
+  me, forgot-password, reset-password, login-link, login-link/confirm):
+  burst 5, refill 1 token / 10 s — `RATE_LIMIT_AUTH_BURST`,
   `RATE_LIMIT_AUTH_REPLENISH_SECS`.
 - **General routes** (everything else): burst 120, refill 1 token / 1 s —
   `RATE_LIMIT_GENERAL_BURST`, `RATE_LIMIT_GENERAL_REPLENISH_SECS`.

@@ -409,3 +409,31 @@ async fn session_status_reports_the_active_session() {
         .expect("session-status after logout");
     assert_eq!(revoked.status(), 401);
 }
+
+#[tokio::test]
+async fn login_link_is_rejected_without_delivery_configuration_but_stays_generic() {
+    let app = common::spawn().await;
+
+    // No Brevo and no relay in the test config, so the request endpoint still
+    // answers the generic 202 (it must not reveal whether the email exists),
+    // while the confirm endpoint cannot complete because no link was minted.
+    let request = app
+        .http
+        .post(app.url("/auth/login-link"))
+        .json(&json!({ "email": "nobody@example.com" }))
+        .send()
+        .await
+        .expect("login-link request");
+    assert_eq!(request.status(), 202);
+    let request_body: Value = request.json().await.expect("login-link body");
+    assert_eq!(request_body["accepted"], true);
+
+    let confirm = app
+        .http
+        .post(app.url("/auth/login-link/confirm"))
+        .json(&json!({ "token": "definitely-not-a-valid-token" }))
+        .send()
+        .await
+        .expect("login-link confirm");
+    assert_eq!(confirm.status(), 400);
+}

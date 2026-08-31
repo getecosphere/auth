@@ -318,6 +318,59 @@ pub async fn send_password_reset_email(
     Ok(None)
 }
 
+/// Passwordless login is an Auth-owned email because it mints a session for
+/// the account when clicked. Same provider-selection contract as reset: the
+/// estate's own Brevo credentials win; the scoped `eco serve` relay is the
+/// temporary fallback.
+pub async fn send_login_link_email(
+    state: &AppState,
+    user: &User,
+    url: &str,
+    ttl_minutes: i64,
+) -> AppResult<Option<String>> {
+    if !state.config.brevo_api_key.is_empty() && !state.config.mail_from_email.is_empty() {
+        let headline = "Tautan masuk akunmu";
+        let message = format!(
+            "Halo <strong>{}</strong>,<br /><br />Kami mengirimkan tautan untuk masuk ke akunmu. Tautan ini berlaku <strong>{} menit</strong> dan hanya dapat digunakan sekali. Jika kamu tidak memintanya, abaikan email ini.",
+            html_escape(&user.name),
+            ttl_minutes,
+        );
+        let html = stuff8_email_shell(
+            headline,
+            &message,
+            &stuff8_cta_button(url, "Masuk ke akun", url),
+        );
+        return send_transactional_mail(state, user, headline, &html).await;
+    }
+
+    if state.config.email_relay_url.trim().is_empty() || state.config.email_relay_token.is_empty() {
+        tracing::warn!(user_id = %user.id_string(), "login link requested but no direct email provider or platform relay is configured");
+        return Ok(None);
+    }
+    let response = reqwest::Client::new()
+        .post(state.config.email_relay_url.trim())
+        .bearer_auth(&state.config.email_relay_token)
+        .json(&serde_json::json!({
+            "kind": "login_link",
+            "to": &user.email,
+            "name": &user.name,
+            "login_url": url,
+            "ttl_minutes": ttl_minutes,
+        }))
+        .send()
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        tracing::error!(%status, user_id = %user.id_string(), "platform login-link relay rejected email");
+        return Err(AppError::Internal(anyhow::anyhow!(
+            "platform login-link relay rejected email: {status}"
+        )));
+    }
+    tracing::info!(user_id = %user.id_string(), "platform login-link relay accepted email");
+    Ok(None)
+}
+
 pub async fn discard_for_user(state: &AppState, user_id: &str) -> AppResult<()> {
     verifications(state)
         .delete_many(doc! { "userId": user_id }, None)
