@@ -53,51 +53,76 @@ test "$code" = "404"
 rg -q 'RESOURCE_NOT_FOUND' "$TMP/useru.out"
 echo "OK get_user_identity_by_username (unknown) -> 404"
 
-# 7) file read for a malformed id -> 404
-code=$(curl -s -o "$TMP/file.out" -w '%{http_code}' "$API/files/not-an-objectid")
-test "$code" = "404"
-rg -q 'RESOURCE_NOT_FOUND' "$TMP/file.out"
-echo "OK download_file (bad id) -> 404"
+# 7) login-link request -> 202 always (must not reveal account existence)
+code=$(curl -s -o "$TMP/ll.out" -w '%{http_code}' -X POST "$API/auth/login-link" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"no-such-user@example.com"}')
+test "$code" = "202"
+rg -q '"accepted"\s*:\s*true' "$TMP/ll.out"
+echo "OK login-link (unknown email) -> 202"
 
-# 8) authenticated endpoints without a token -> 401
+# 8) forgot-password request -> 202 always (same anti-enumeration contract)
+code=$(curl -s -o "$TMP/fp.out" -w '%{http_code}' -X POST "$API/auth/forgot-password" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"no-such-user@example.com"}')
+test "$code" = "202"
+rg -q '"accepted"\s*:\s*true' "$TMP/fp.out"
+echo "OK forgot-password (unknown email) -> 202"
+
+# 9) login-link confirm with a bogus token -> 400
+code=$(curl -s -o "$TMP/llc.out" -w '%{http_code}' -X POST "$API/auth/login-link/confirm" \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"bogus-token"}')
+test "$code" = "400"
+rg -q 'INVALID_ARGUMENT|VALIDATION_ERROR' "$TMP/llc.out"
+echo "OK login-link confirm (bogus token) -> 400"
+
+# 10) reset-password with a bogus token -> 400
+code=$(curl -s -o "$TMP/rp.out" -w '%{http_code}' -X POST "$API/auth/reset-password" \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"bogus-token","newPassword":"SomeNewPass1"}')
+test "$code" = "400"
+rg -q 'INVALID_ARGUMENT|VALIDATION_ERROR' "$TMP/rp.out"
+echo "OK reset-password (bogus token) -> 400"
+
+# 11) authenticated endpoints without a token -> 401
 for path in \
   "auth/session" \
+  "auth/session-status" \
+  "auth/logout" \
   "auth/access-rights" \
   "auth/verification-status" \
   "auth/resend-verification" \
   "auth/verify-password" \
   "auth/mail" \
-  "users/deadbeefdeadbeefdeadbeef" \
-  "files/not-an-objectid"
+  "auth/me" \
+  "users/deadbeefdeadbeefdeadbeef"
 do
   method=GET
-  [ "$path" = "auth/resend-verification" ] || [ "$path" = "auth/verify-password" ] || [ "$path" = "auth/mail" ] && method=POST
+  case "$path" in
+    auth/logout|auth/resend-verification|auth/verify-password|auth/mail) method=POST ;;
+    auth/me) method=PUT ;;
+  esac
   code=$(curl -s -o "$TMP/unauth.out" -w '%{http_code}' -X "$method" "$API/$path")
   test "$code" = "401"
   rg -q 'Unauthorized' "$TMP/unauth.out"
   echo "OK $path (no token) -> 401"
 done
 
-# 9) change-password without a token -> 401 (query params, PUT)
+# 12) change-password without a token -> 401 (query params, PUT)
 code=$(curl -s -o "$TMP/cp.out" -w '%{http_code}' -X PUT \
   "$API/auth/change-password?currentPassword=old&newPassword=newpassword123")
 test "$code" = "401"
 rg -q 'Unauthorized' "$TMP/cp.out"
 echo "OK change-password (no token) -> 401"
 
-# 10) avatar upload without a token -> 401
-code=$(curl -s -o "$TMP/av.out" -w '%{http_code}' -X POST \
-  -F 'file=@/dev/null;type=image/png' "$API/users/deadbeefdeadbeefdeadbeef/avatar")
+# 13) admin routes without a superadmin token -> 401
+code=$(curl -s -o "$TMP/admin.out" -w '%{http_code}' -X POST "$API/auth/admin/register" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"x","email":"x@example.com","password":"LongPass1","name":"X"}')
 test "$code" = "401"
-rg -q 'Unauthorized' "$TMP/av.out"
-echo "OK avatar upload (no token) -> 401"
-
-# 11) me (PUT) without a token -> 401
-code=$(curl -s -o "$TMP/me.out" -w '%{http_code}' -X PUT "$API/auth/me" \
-  -H 'Content-Type: application/json' -d '{"name":"Alice"}')
-test "$code" = "401"
-rg -q 'Unauthorized' "$TMP/me.out"
-echo "OK me (no token) -> 401"
+rg -q 'Unauthorized' "$TMP/admin.out"
+echo "OK admin/register (no token) -> 401"
 
 echo
 echo "All auth LXS smoke checks passed against $BASE_URL"

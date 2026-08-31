@@ -65,12 +65,26 @@ the binary, so read this before deploying or writing consumers.
   `{origin}/reset-password?token=<recordId>.<secret>`; the secret is never
   stored plaintext. A new request invalidates a previous unused link. Reset
   success revokes every active session, so all devices must sign in again.
+- **Login links never confirm an account exists.** `POST
+  /api/auth/login-link` always returns 202; a single-use link is emailed only
+  for a known address when a public origin and delivery (Brevo or the scoped
+  relay) are configured. It is the recovery path for a user blocked by the
+  single-session 409 — clicking the link proves mailbox control, mints a fresh
+  session, and revokes every older one, so the old (possibly lost) device dies
+  immediately.
+- **Login-link tokens are one-time, bcrypt-hashed, and expire fast.** URL is
+  `{origin}/login-link?token=<recordId>.<secret>`, TTL defaults to 10 minutes
+  (`LOGIN_LINK_TTL_MINUTES`, bounded 5–60). Only one unused link per account
+  is alive at a time (a new request invalidates the previous one). Confirming
+  also marks an unverified account's email as verified — mailbox control *is*
+  the verification. Do not branch a frontend on the 202 body.
 - **`verify-password` exists specifically so a sensitive-action confirmation
   (e.g. deleting an account) never re-posts the real password** through a
   mutating change-password call. It verifies only.
 - **Rate limits are per source IP and split in two buckets.**
-  Auth routes (login/register/verify-email/resend/mail/change-password/
-  verify-password/forgot-password/reset-password/me): burst 5, refill 1 per 10 s. Everything else: burst
+  Auth routes (login/register/register-with-profile/verify-email/resend/mail/
+  change-password/verify-password/forgot-password/reset-password/login-link/
+  login-link/confirm/me): burst 5, refill 1 per 10 s. Everything else: burst
   120, refill 1 per 1 s. `verification-status` deliberately sits in the
   general bucket so the shared frontend layout poll doesn't consume the
   credential-stuffing budget. Tune via `RATE_LIMIT_AUTH_BURST` /
@@ -79,7 +93,7 @@ the binary, so read this before deploying or writing consumers.
 - **MongoDB URI must include a database name** (e.g.
   `mongodb://localhost:27017/rwid_community`); the default database is
   `rwid_community`. Collections used: `users`, `email_verifications`,
-  `password_resets`, and `sessions`. Timestamps stored via `bson::DateTime` — do not write raw
+  `password_resets`, `login_links`, and `sessions`. Timestamps stored via `bson::DateTime` — do not write raw
   `chrono` timestamps through `$set` updates or deserialization breaks.
 - **Public identity lookups (`/auth/users/{id}`, `/auth/users/username/{u}`,
   `/health`,
