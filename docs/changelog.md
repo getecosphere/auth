@@ -1,5 +1,12 @@
 # auth changelog
 
+## 3.8.1 (2026-08-31)
+- Docs-only patch (binary identical to 3.8.0): `openapi.json` now reflects the
+  current route surface (added `login-link`/`login-link/confirm`,
+  `forgot-password`, `reset-password`, `logout`, `session-status`, admin
+  routes; removed long-dead avatar/file endpoints), `examples.sh` smoke tests
+  cover the login-link flow, and `gotchas.md` documents login-link constraints.
+
 ## 3.8.0 (2026-08-31)
 - **Passwordless login links — the recovery path for single-session
   lockout.** A user blocked by `409 ALREADY_EXISTS` (an active session on a
